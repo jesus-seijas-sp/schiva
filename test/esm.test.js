@@ -7,7 +7,7 @@ describe('ESM import', () => {
   test('every export is available as a named ESM export', () => {
     const url = pathToFileURL(path.join(__dirname, '../src/index.js')).href;
     const script = `import * as ns from ${JSON.stringify(url)};
-      console.log(JSON.stringify(Object.keys(ns).filter((key) => key !== 'default')));`;
+      console.log(JSON.stringify(Object.keys(ns).filter((key) => key !== 'default' && key !== 'module.exports')));`;
     const output = execFileSync(process.execPath, ['--input-type=module', '-e', script], {
       encoding: 'utf8',
     });
