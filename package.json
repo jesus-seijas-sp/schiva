@@ -1,0 +1,43 @@
+{
+  "name": "schiva",
+  "version": "0.1.0",
+  "description": "Fast schema validation for JavaScript: a schema DSL and JSON Schema (draft-07), compiled to generated code",
+  "main": "./src/index.js",
+  "type": "commonjs",
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "lint": "eslint .",
+    "lintfix": "eslint --fix .",
+    "test": "eslint . && jest --silent --coverage .",
+    "bench": "cd bench && pnpm install && pnpm start",
+    "bench:quick": "cd bench && pnpm install && pnpm run quick"
+  },
+  "keywords": [
+    "schema",
+    "validation",
+    "validator",
+    "json-schema",
+    "draft-07",
+    "compiler",
+    "fast"
+  ],
+  "author": "Jesús Seijas <jseijas@gmail.com>",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3.3.1",
+    "@eslint/js": "^9.39.2",
+    "eslint": "^9.39.2",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-jest": "^29.12.1",
+    "eslint-plugin-prettier": "^5.5.5",
+    "globals": "^17.0.0",
+    "jest": "^30.2.0",
+    "prettier": "^3.8.0"
+  },
+  "packageManager": "pnpm@10.26.1"
+}

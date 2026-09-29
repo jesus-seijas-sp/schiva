@@ -1,0 +1,62 @@
+const { ValidateType } = require('./validate-type');
+
+// Value must satisfy every type; reports the errors of the first type that fails.
+class AllOfType extends ValidateType {
+  constructor(options = {}) {
+    super(options);
+    this.types = options.types || [];
+  }
+
+  validate(value, fieldName = 'Value') {
+    const result = super.validate(value, fieldName);
+    if (result) {
+      return result;
+    }
+    if (value !== undefined && value !== null) {
+      for (let i = 0; i < this.types.length; i += 1) {
+        if (!this.types[i].isValid(value)) {
+          return this.types[i].errors(value, fieldName);
+        }
+      }
+    }
+    return undefined;
+  }
+
+  isValid(value) {
+    const presence = this.checkPresence(value);
+    if (presence !== undefined) {
+      return presence;
+    }
+    for (let i = 0; i < this.types.length; i += 1) {
+      if (!this.types[i].isValid(value)) {
+        return false;
+      }
+    }
+    return true;
+  }
+}
+
+function AllOf(options) {
+  return new AllOfType(options);
+}
+
+function allOf(types, isMandatory = true, isNullable = false) {
+  if (types !== undefined && types !== null && !Array.isArray(types) && typeof types === 'object') {
+    return new AllOfType(types);
+  }
+  return new AllOfType({ types, isMandatory, isNullable });
+}
+
+function oallOf(types, isMandatory = false, isNullable = false) {
+  if (types !== undefined && types !== null && !Array.isArray(types) && typeof types === 'object') {
+    return new AllOfType({ isMandatory: false, ...types });
+  }
+  return new AllOfType({ types, isMandatory, isNullable });
+}
+
+module.exports = {
+  AllOfType,
+  AllOf,
+  allOf,
+  oallOf,
+};
