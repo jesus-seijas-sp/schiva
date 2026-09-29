@@ -1,7 +1,7 @@
 {
   "name": "schiva",
   "version": "0.2.0",
-  "description": "Fast schema validation for JavaScript: a schema DSL and JSON Schema (draft-07), compiled to generated code",
+  "description": "Fast schema validation for JavaScript: a schema DSL and JSON Schema (draft-07, 2019-09, 2020-12), compiled to generated code",
   "homepage": "https://schiva.js.org",
   "repository": {
     "type": "git",
@@ -20,7 +20,8 @@
     "lintfix": "eslint --fix .",
     "test": "eslint . && jest --silent --coverage .",
     "bench": "cd bench && pnpm install && pnpm start",
-    "bench:quick": "cd bench && pnpm install && pnpm run quick"
+    "bench:quick": "cd bench && pnpm install && pnpm run quick",
+    "conformance": "cd bench && pnpm install && pnpm run conformance"
   },
   "keywords": [
     "schema",
@@ -28,6 +29,8 @@
     "validator",
     "json-schema",
     "draft-07",
+    "2019-09",
+    "2020-12",
     "compiler",
     "fast",
     "jsonschema",

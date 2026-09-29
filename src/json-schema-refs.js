@@ -1,6 +1,7 @@
-// Resolution of JSON Schema (draft-07) references: JSON pointers ("#/definitions/a"), "$id" base URI changes and "$id"
-// anchors ("#foo"), within the schema and within other documents registered by URI. Nothing is loaded from the
-// network: a reference to a document that is not registered does not resolve.
+// Resolution of JSON Schema references: JSON pointers ("#/definitions/a"), "$id" base URI changes, and anchors ("#foo":
+// "$id" fragments, and from draft 2019-09 on "$anchor" and "$dynamicAnchor"), within the schema and within other
+// documents registered by URI. Nothing is loaded from the network: a reference to a document that is not registered
+// does not resolve.
 
 // Base URI of a document without "$id".
 const DEFAULT_BASE = 'schiva://schema/root.json';
@@ -16,9 +17,19 @@ const SCHEMA_KEYWORDS = [
   'not',
   'propertyNames',
   'then',
+  'contentSchema',
+  'unevaluatedItems',
+  'unevaluatedProperties',
 ];
-const SCHEMA_MAP_KEYWORDS = ['definitions', 'dependencies', 'patternProperties', 'properties'];
-const SCHEMA_LIST_KEYWORDS = ['allOf', 'anyOf', 'items', 'oneOf'];
+const SCHEMA_MAP_KEYWORDS = [
+  'definitions',
+  '$defs',
+  'dependencies',
+  'dependentSchemas',
+  'patternProperties',
+  'properties',
+];
+const SCHEMA_LIST_KEYWORDS = ['allOf', 'anyOf', 'items', 'oneOf', 'prefixItems'];
 
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
@@ -89,7 +100,8 @@ function documentsOf(schemas) {
 }
 
 class RefIndex {
-  constructor(root, schemas = undefined) {
+  constructor(root, schemas = undefined, draft = 'draft-07') {
+    this.draft = draft;
     // Documents (URIs without fragment) and anchors ("uri#name") to their schema node.
     this.resources = new Map([[DEFAULT_BASE, root]]);
     this.anchors = new Map();
@@ -110,13 +122,19 @@ class RefIndex {
     }
   }
 
+  addAnchor(anchor, node) {
+    if (!this.anchors.has(anchor)) {
+      this.anchors.set(anchor, node);
+    }
+  }
+
   visit(node, parentBase) {
     if (!isObject(node) || this.bases.has(node)) {
       return;
     }
     let base = parentBase;
     // In draft-07 every keyword next to "$ref" is ignored, "$id" included.
-    if (typeof node.$id === 'string' && node.$ref === undefined) {
+    if (typeof node.$id === 'string' && (node.$ref === undefined || this.draft !== 'draft-07')) {
       const uri = resolveUri(node.$id, parentBase);
       if (uri !== undefined) {
         const [document, fragment] = splitFragment(uri);
@@ -124,10 +142,17 @@ class RefIndex {
         if (fragment === '') {
           base = document;
           this.addResource(document, node);
-        } else if (!this.anchors.has(anchor)) {
-          this.anchors.set(anchor, node);
+        } else {
+          this.addAnchor(anchor, node);
         }
       }
+    }
+    // Anchors of the later drafts name the node within the resource of its base URI.
+    if (this.draft !== 'draft-07' && typeof node.$anchor === 'string') {
+      this.addAnchor(`${base}#${node.$anchor}`, node);
+    }
+    if (this.draft === '2020-12' && typeof node.$dynamicAnchor === 'string') {
+      this.addAnchor(`${base}#${node.$dynamicAnchor}`, node);
     }
     this.bases.set(node, base);
     SCHEMA_KEYWORDS.forEach((keyword) => this.visit(node[keyword], base));

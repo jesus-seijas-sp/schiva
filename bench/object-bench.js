@@ -10,7 +10,7 @@ const { cases, compileCase, prepareCase } = require('./lib/cases');
 async function runCase(c) {
   const bench = new Bench({ time: 1000, warmupTime: 200 });
   const skipped = [];
-  validators.forEach((v) => {
+  validators.forDraft(c.draft).forEach((v) => {
     const { fn, skipped: reason } = prepareCase(v, c);
     if (reason) {
       skipped.push(reason);

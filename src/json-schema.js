@@ -1,6 +1,7 @@
 const { Schema } = require('./schema');
 const { compileType } = require('./compile');
 const { RefIndex } = require('./json-schema-refs');
+const { UnevaluatedType } = require('./unevaluated');
 
 const {
   AllOfType,
@@ -20,6 +21,17 @@ const {
   WhenType,
 } = require('./types');
 
+// Drafts by the "$schema" URI (without its empty fragment) that selects them.
+const DRAFT_URIS = {
+  'http://json-schema.org/draft-07/schema': 'draft-07',
+  'https://json-schema.org/draft-07/schema': 'draft-07',
+  'https://json-schema.org/draft/2019-09/schema': '2019-09',
+  'http://json-schema.org/draft/2019-09/schema': '2019-09',
+  'https://json-schema.org/draft/2020-12/schema': '2020-12',
+  'http://json-schema.org/draft/2020-12/schema': '2020-12',
+};
+const DRAFTS = ['draft-07', '2019-09', '2020-12'];
+
 const ANNOTATIONS = [
   '$schema',
   '$id',
@@ -33,19 +45,49 @@ const ANNOTATIONS = [
   'writeOnly',
   'deprecated',
   'nullable',
-  // Only used through "$ref".
+  'contentMediaType',
+  'contentEncoding',
+  'contentSchema',
+  // Only used through "$ref"; "$defs" is also accepted in draft-07.
   'definitions',
+  '$defs',
 ];
+
+// Keywords that only exist from a draft on, as annotations or checked by the code below.
+const ANNOTATIONS_2019 = ['$anchor', '$vocabulary', '$recursiveAnchor'];
+const ANNOTATIONS_2020 = ['$dynamicAnchor'];
+
+// Keywords of the later drafts that are not supported yet: they throw rather than being ignored.
+const NOT_SUPPORTED_YET = ['$recursiveRef', '$dynamicRef'];
+
+// Keywords that exist only in some drafts, with the drafts that have them.
+const DRAFT_KEYWORDS = {
+  additionalItems: ['draft-07', '2019-09'],
+  dependentRequired: ['2019-09', '2020-12'],
+  dependentSchemas: ['2019-09', '2020-12'],
+  minContains: ['2019-09', '2020-12'],
+  maxContains: ['2019-09', '2020-12'],
+  prefixItems: ['2020-12'],
+  unevaluatedProperties: ['2019-09', '2020-12'],
+  unevaluatedItems: ['2019-09', '2020-12'],
+};
 
 const TYPED_KEYWORDS = {
   properties: 'object',
   patternProperties: 'object',
   dependencies: 'object',
   propertyNames: 'object',
+  dependentRequired: 'object',
+  dependentSchemas: 'object',
   contains: 'array',
+  minContains: 'array',
+  maxContains: 'array',
+  prefixItems: 'array',
   additionalItems: 'array',
+  unevaluatedItems: 'array',
   required: 'object',
   additionalProperties: 'object',
+  unevaluatedProperties: 'object',
   minProperties: 'object',
   maxProperties: 'object',
   items: 'array',
@@ -66,6 +108,10 @@ const UNTYPED_KEYWORDS = ['type', 'enum', 'const', 'anyOf', 'oneOf', 'not', 'all
 
 const TYPE_NAMES = ['object', 'array', 'string', 'number', 'integer', 'boolean', 'null'];
 
+// State of the conversion in progress: the draft, the reference index of the document, the types converted for
+// reference targets, and the references still to resolve.
+let context;
+
 function getTypeNames(json) {
   if (json.type === undefined) {
     return [];
@@ -80,12 +126,21 @@ function checkKeywords(json, path) {
       throw new Error(`Unsupported JSON Schema type "${typeName}" at ${path}`);
     }
   });
+  const { draft } = context;
   Object.keys(json).forEach((keyword) => {
-    if (ANNOTATIONS.includes(keyword) || UNTYPED_KEYWORDS.includes(keyword)) {
+    if (
+      ANNOTATIONS.includes(keyword) ||
+      UNTYPED_KEYWORDS.includes(keyword) ||
+      (draft !== 'draft-07' && ANNOTATIONS_2019.includes(keyword)) ||
+      (draft === '2020-12' && ANNOTATIONS_2020.includes(keyword))
+    ) {
       return;
     }
+    if (NOT_SUPPORTED_YET.includes(keyword)) {
+      throw new Error(`JSON Schema keyword "${keyword}" at ${path} is not supported yet`);
+    }
     const requiredType = TYPED_KEYWORDS[keyword];
-    if (!requiredType) {
+    if (!requiredType || (DRAFT_KEYWORDS[keyword] && !DRAFT_KEYWORDS[keyword].includes(draft))) {
       throw new Error(`Unsupported JSON Schema keyword "${keyword}" at ${path}`);
     }
     // Without "type" a keyword only applies to values of its type. With a "type" that excludes it, the keyword could
@@ -97,9 +152,27 @@ function checkKeywords(json, path) {
   });
 }
 
-// State of the conversion in progress: the reference index of the document, the types converted for reference
-// targets, and the references still to resolve.
-let context;
+// The draft of a schema: options.draft, or the one its "$schema" names. Without either, or with another "$schema",
+// the schema is read as draft-07, as before later drafts were supported.
+function draftOf(json, options) {
+  if (options.draft !== undefined) {
+    if (!DRAFTS.includes(options.draft)) {
+      throw new Error(`Unsupported JSON Schema option "draft": "${options.draft}" is not one of ${DRAFTS.join(', ')}`);
+    }
+    return options.draft;
+  }
+  const uri = json !== null && typeof json === 'object' && typeof json.$schema === 'string' ? json.$schema : '';
+  return DRAFT_URIS[uri.replace(/#$/, '')] || 'draft-07';
+}
+
+// The keywords of a node other than "$ref", which later drafts apply next to it; undefined when there are none but
+// annotations.
+function besideRef(json) {
+  const { $ref, ...rest } = json;
+  const isAnnotation = (keyword) =>
+    ANNOTATIONS.includes(keyword) || ANNOTATIONS_2019.includes(keyword) || ANNOTATIONS_2020.includes(keyword);
+  return Object.keys(rest).every(isAnnotation) ? undefined : rest;
+}
 
 // null is valid only if every constraint of the node accepts it. `seen` stops at reference cycles, which give no
 // value that accepts null.
@@ -119,7 +192,8 @@ function acceptsNull(json, seen = new Set()) {
     seen.add(json);
     const result = acceptsNull(target, seen);
     seen.delete(json);
-    return result;
+    const rest = context.draft === 'draft-07' ? undefined : besideRef(json);
+    return result && (rest === undefined || acceptsNull(rest, seen));
   }
   if (json.nullable === true) {
     return true;
@@ -173,19 +247,35 @@ function combine(types, Type) {
 
 let convert;
 
-// A list of required properties, or a schema the whole object must satisfy, for each key.
+function requiredDependency(key, dependency, path) {
+  if (!Array.isArray(dependency) || !dependency.every((property) => typeof property === 'string')) {
+    throw new Error(`Unsupported JSON Schema at ${path}: expected property names`);
+  }
+  return { key, required: dependency };
+}
+
+// A list of required properties, or a schema the whole object must satisfy, for each key: from "dependencies", and
+// from "dependentRequired" and "dependentSchemas", which split it in two from draft 2019-09 on.
 function convertDependencies(json, path) {
   const dependencies = json.dependencies || {};
-  return Object.keys(dependencies).map((key) => {
-    const dependency = dependencies[key];
-    if (Array.isArray(dependency)) {
-      if (!dependency.every((property) => typeof property === 'string')) {
-        throw new Error(`Unsupported JSON Schema at ${path}.dependencies.${key}: expected property names`);
-      }
-      return { key, required: dependency };
-    }
-    return { key, type: asInner(convert(dependency, `${path}.dependencies.${key}`)) };
-  });
+  const dependentRequired = json.dependentRequired || {};
+  const dependentSchemas = json.dependentSchemas || {};
+  return [
+    ...Object.keys(dependencies).map((key) => {
+      const dependency = dependencies[key];
+      const at = `${path}.dependencies.${key}`;
+      return Array.isArray(dependency)
+        ? requiredDependency(key, dependency, at)
+        : { key, type: asInner(convert(dependency, at)) };
+    }),
+    ...Object.keys(dependentRequired).map((key) =>
+      requiredDependency(key, dependentRequired[key], `${path}.dependentRequired.${key}`)
+    ),
+    ...Object.keys(dependentSchemas).map((key) => ({
+      key,
+      type: asInner(convert(dependentSchemas[key], `${path}.dependentSchemas.${key}`)),
+    })),
+  ];
 }
 
 function convertObject(json, path) {
@@ -213,7 +303,7 @@ function convertObject(json, path) {
     pattern: new RegExp(source, 'u'),
     type: convert(patternProperties[source], `${path}.patternProperties.${source}`),
   }));
-  return new Schema(definition, {
+  const schema = new Schema(definition, {
     isOpen: additionalProperties !== false,
     additionalType,
     patternTypes,
@@ -223,31 +313,61 @@ function convertObject(json, path) {
     minProperties: json.minProperties,
     maxProperties: json.maxProperties,
   });
+  // For "unevaluatedProperties": the keys "properties" names (the schema also declares the ones only "required"
+  // names), and whether "additionalProperties" evaluates every other key, as it does even when it is true.
+  schema.propertyKeys = Object.keys(properties);
+  schema.evaluatesAllKeys = additionalProperties !== undefined;
+  return schema;
 }
+
+const tuple = (items, keyword, path) => items.map((item, i) => convert(item, `${path}.${keyword}[${i}]`, false));
 
 function convertArray(json, path) {
   const { items } = json;
   let type;
-  if (Array.isArray(items)) {
-    type = items.map((item, i) => convert(item, `${path}.items[${i}]`, false));
-  } else if (items !== undefined) {
-    type = convert(items, `${path}.items`);
+  let additionalType;
+  if (context.draft === '2020-12') {
+    // "prefixItems" is the tuple, and "items" the type of the elements after it (or of all of them).
+    if (Array.isArray(items)) {
+      throw new Error(`Unsupported JSON Schema at ${path}: in draft 2020-12 "items" is a schema; use "prefixItems"`);
+    }
+    const rest = items === undefined ? undefined : convert(items, `${path}.items`);
+    if (json.prefixItems !== undefined) {
+      if (!Array.isArray(json.prefixItems)) {
+        throw new Error(`Unsupported JSON Schema at ${path}: "prefixItems" must be an array`);
+      }
+      type = tuple(json.prefixItems, 'prefixItems', path);
+      additionalType = rest;
+    } else {
+      type = rest;
+    }
+  } else {
+    if (Array.isArray(items)) {
+      type = tuple(items, 'items', path);
+    } else if (items !== undefined) {
+      type = convert(items, `${path}.items`);
+    }
+    // Only used after the positions of an items array.
+    additionalType =
+      Array.isArray(items) && json.additionalItems !== undefined
+        ? convert(json.additionalItems, `${path}.additionalItems`)
+        : undefined;
   }
   // Elements are values of their own: null is checked, not skipped.
   const contains = json.contains === undefined ? undefined : convert(json.contains, `${path}.contains`);
-  // Only used after the positions of an items array.
-  const additionalType =
-    Array.isArray(items) && json.additionalItems !== undefined
-      ? convert(json.additionalItems, `${path}.additionalItems`)
-      : undefined;
-  return new ArrayOfType({
+  const array = new ArrayOfType({
     type,
     min: json.minItems,
     max: json.maxItems,
     unique: json.uniqueItems,
     contains,
+    minContains: json.minContains,
+    maxContains: json.maxContains,
     additionalType,
   });
+  // For "unevaluatedItems": in draft 2020-12 "contains" evaluates the elements it matches.
+  array.containsEvaluates = context.draft === '2020-12';
+  return array;
 }
 
 function convertNumber(json, Type, path) {
@@ -294,6 +414,20 @@ function convertUntyped(json, path) {
   return jsonTypes.map((jsonType) => new WhenType({ jsonType, type: asInner(convertTypeName(jsonType, json, path)) }));
 }
 
+// Adds "unevaluatedProperties" and "unevaluatedItems" to the types of the other keywords of a node, which decide
+// what they leave to check.
+function addUnevaluated(parts, json, path) {
+  const siblings = [...parts];
+  if (json.unevaluatedProperties !== undefined) {
+    const type = convert(json.unevaluatedProperties, `${path}.unevaluatedProperties`);
+    parts.push(new UnevaluatedType({ kind: 'properties', siblings, type }));
+  }
+  if (json.unevaluatedItems !== undefined) {
+    const type = convert(json.unevaluatedItems, `${path}.unevaluatedItems`);
+    parts.push(new UnevaluatedType({ kind: 'items', siblings, type }));
+  }
+}
+
 convert = (json, path, isMandatory = true) => {
   if (json === true) {
     return new AnyType({ isMandatory, isNullable: true });
@@ -305,13 +439,27 @@ convert = (json, path, isMandatory = true) => {
     throw new Error(`Unsupported JSON Schema at ${path}: expected an object or a boolean`);
   }
   if (json.$ref !== undefined) {
-    // In draft-07 every keyword next to "$ref" is ignored.
     if (typeof json.$ref !== 'string') {
       throw new Error(`Unsupported JSON Schema at ${path}: "$ref" must be a string`);
     }
     const ref = new RefType({ ref: json.$ref, isMandatory, isNullable: true });
     context.pending.push({ ref, json, path });
-    return ref;
+    // In draft-07 every keyword next to "$ref" is ignored; later drafts apply them too.
+    const rest = context.draft === 'draft-07' ? undefined : besideRef(json);
+    if (rest === undefined) {
+      return ref;
+    }
+    // The reference counts as one of the keywords that evaluate properties and elements for "unevaluated*".
+    const { unevaluatedProperties, unevaluatedItems, ...others } = rest;
+    const parts = [ref];
+    if (besideRef(others) !== undefined) {
+      parts.push(convert(others, path));
+    }
+    addUnevaluated(parts, json, path);
+    const type = new AllOfType({ types: parts.map(asInner) });
+    type.isMandatory = isMandatory;
+    type.isNullable = acceptsNull(json);
+    return type;
   }
   checkKeywords(json, path);
   const typeNames = getTypeNames(json);
@@ -355,8 +503,10 @@ convert = (json, path, isMandatory = true) => {
   if (json.allOf) {
     json.allOf.forEach((item, i) => constraints.push(convert(item, `${path}.allOf[${i}]`)));
   }
-  // "then" and "else" are ignored without "if", and "if" alone checks nothing.
-  if (json.if !== undefined && (json.then !== undefined || json.else !== undefined)) {
+  // "then" and "else" are ignored without "if", and "if" alone checks nothing. From draft 2019-09 on it is kept even
+  // alone, as what it evaluates counts for an "unevaluated*" of this node or of one that refers to it.
+  const keepsIf = json.then !== undefined || json.else !== undefined || context.draft !== 'draft-07';
+  if (json.if !== undefined && keepsIf) {
     const branch = (keyword) =>
       json[keyword] === undefined ? undefined : asInner(convert(json[keyword], `${path}.${keyword}`));
     constraints.push(
@@ -367,6 +517,7 @@ convert = (json, path, isMandatory = true) => {
       })
     );
   }
+  addUnevaluated(constraints, json, path);
   const type = combine(constraints, AllOfType);
   type.isMandatory = isMandatory;
   type.isNullable = acceptsNull(json);
@@ -391,11 +542,13 @@ function resolveReferences() {
   }
 }
 
-// Builds a validation type from a JSON Schema (draft-07). Throws on unsupported keywords instead of silently ignoring
-// them. "$ref" can point within the schema or to the documents in options.schemas, given as { uri: schema } or as an
-// array of schemas with "$id"; they are only converted where referenced.
+// Builds a validation type from a JSON Schema (draft-07, 2019-09 or 2020-12: see draftOf()). Throws on unsupported
+// keywords instead of silently ignoring them. "$ref" can point within the schema or to the documents in
+// options.schemas, given as { uri: schema } or as an array of schemas with "$id"; they are only converted where
+// referenced.
 function fromJsonSchema(json, options = {}) {
-  context = { index: new RefIndex(json, options.schemas), targets: new Map(), pending: [] };
+  const draft = draftOf(json, options);
+  context = { draft, index: new RefIndex(json, options.schemas, draft), targets: new Map(), pending: [] };
   try {
     const type = convert(json, '#');
     context.targets.set(json, type);
@@ -408,8 +561,8 @@ function fromJsonSchema(json, options = {}) {
 
 // Compatibility with ajv compile: returns a function that gives the list of errors for a value (empty when valid).
 // With allErrors: false it stops at the first failing check and gives only that error. With errors: false it gives
-// true or false instead, for when only validity matters. options.schemas registers other documents for "$ref", as in
-// fromJsonSchema().
+// true or false instead, for when only validity matters. options.schemas registers other documents for "$ref", and
+// options.draft chooses the draft, as in fromJsonSchema().
 function compileJsonSchema(json, options = {}) {
   return compileType(fromJsonSchema(json, options), options);
 }

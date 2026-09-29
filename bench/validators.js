@@ -4,6 +4,8 @@
 // `remotes` ({ uri: schema }, optional) are other documents that "$ref" can point to; each library gets them through
 // its own registration API.
 const Ajv = require('ajv');
+const Ajv2019 = require('ajv/dist/2019').default;
+const Ajv2020 = require('ajv/dist/2020').default;
 const { validator: schemasafe } = require('@exodus/schemasafe');
 const imjv = require('is-my-json-valid');
 const djv = require('djv');
@@ -40,7 +42,7 @@ function ajv(options) {
   };
 }
 
-module.exports = [
+const validators = [
   // First entry: the suite benchmark times the groups this one passes.
   {
     name: 'schiva (all errors)',
@@ -158,3 +160,71 @@ module.exports = [
     },
   },
 ];
+
+// Validators of drafts 2019-09 and 2020-12: schiva, and the libraries above that implement them, each set to the draft
+// (the others implement draft-07 at most). ajv has a class for each draft, with its meta-schemas already added.
+const LATER_DRAFTS = {
+  'draft2019-09': { Ajv: Ajv2019, uri: 'https://json-schema.org/draft/2019-09/schema', cfworker: '2019-09' },
+  'draft2020-12': { Ajv: Ajv2020, uri: 'https://json-schema.org/draft/2020-12/schema', cfworker: '2020-12' },
+};
+
+function ajvOf(AjvClass, options) {
+  return (schema, remotes) => {
+    const instance = new AjvClass({ strict: false, ...options });
+    each(remotes)
+      .filter(([uri]) => !uri.startsWith('https://json-schema.org/'))
+      .forEach(([uri, remote]) => instance.addSchema(remote, uri));
+    return instance.compile(clone(schema));
+  };
+}
+
+function forDraft(draft = 'draft7') {
+  if (draft === 'draft7') {
+    return validators;
+  }
+  const { Ajv: AjvClass, uri, cfworker } = LATER_DRAFTS[draft];
+  const safeOptions = (remotes, extra = {}) => ({
+    mode: 'spec',
+    $schemaDefault: uri,
+    schemas: asObject(remotes),
+    ...extra,
+  });
+  return [
+    ...validators.filter((validator) => validator.name.startsWith('schiva')),
+    { name: 'ajv (first error)', compile: ajvOf(AjvClass, {}) },
+    { name: 'ajv (all errors)', compile: ajvOf(AjvClass, { allErrors: true }) },
+    {
+      name: '@exodus/schemasafe (boolean)',
+      compile: (schema, remotes) => schemasafe(clone(schema), safeOptions(remotes)),
+    },
+    {
+      name: '@exodus/schemasafe (first error)',
+      compile: (schema, remotes) => schemasafe(clone(schema), safeOptions(remotes, { includeErrors: true })),
+    },
+    {
+      name: '@exodus/schemasafe (all errors)',
+      compile: (schema, remotes) =>
+        schemasafe(clone(schema), safeOptions(remotes, { includeErrors: true, allErrors: true })),
+    },
+    {
+      name: '@cfworker/json-schema',
+      compile: (schema, remotes) => {
+        const v = new CfValidator(clone(schema), cfworker, false);
+        each(remotes).forEach(([remoteUri, remote]) => v.addSchema(remote, remoteUri));
+        return (data) => v.validate(data).valid;
+      },
+    },
+    {
+      name: 'json-schema-library',
+      compile: (schema, remotes) => {
+        const node = jslCompile(clone(schema));
+        each(remotes).forEach(([remoteUri, remote]) => node.addRemoteSchema(remoteUri, remote));
+        return (data) => node.validate(data).valid;
+      },
+    },
+  ];
+}
+
+// The draft-07 validators, as before; forDraft() gives the ones of each draft.
+module.exports = validators;
+module.exports.forDraft = forDraft;

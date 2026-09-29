@@ -720,3 +720,9 @@ tr:last-child td {
 td > code:first-child:last-child {
   white-space: nowrap;
 }
+
+/* Tables of numbers: cells stay on one line, and the table scrolls sideways when it does not fit. */
+table.numbers th,
+table.numbers td:not(:first-child) {
+  white-space: nowrap;
+}

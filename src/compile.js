@@ -24,6 +24,7 @@ const {
 } = require('./types');
 const { codePointLength } = require('./types/code-point-length');
 const { hasDuplicates } = require('./types/has-duplicates');
+const { JSON_TYPES, UnevaluatedType, staticEvaluatedBy, staticEvaluatedByAll } = require('./unevaluated');
 
 // Compiles a type tree into a single generated function, like ajv does, so validating a value runs inline code
 // instead of one isValid()/errors() call per node. There are three modes:
@@ -169,6 +170,8 @@ class Generator {
     this.nodes = [];
     this.functions = [];
     this.checkFunctions = new Map();
+    // Functions adding what a type evaluates to a Set, by kind ('properties' or 'items'): see evaluatedFunction().
+    this.evaluatedFunctions = { properties: new Map(), items: new Map() };
     // Per mode, the function validating each reference target.
     this.refFunctions = { check: new Map(), first: new Map(), all: new Map() };
     this.count = 0;
@@ -176,6 +179,22 @@ class Generator {
     this.visiting = new Set();
     // Statement for a failed check in 'check' mode: a return, or a break out of an inlined check.
     this.fail = 'return false;';
+    // Generated function being written: code shares variables only within one (see sharedMatches).
+    this.scope = 0;
+    this.scopes = 0;
+    // OneOf nodes of an allOf whose matching alternatives a later "unevaluated*" of the same allOf reuses: the
+    // variables they are recorded in, the value and function they belong to, and whether the oneOf wrote them.
+    this.sharedMatches = new Map();
+  }
+
+  // Runs `generate` as the body of another generated function.
+  inScope(generate) {
+    const { scope } = this;
+    this.scopes += 1;
+    this.scope = this.scopes;
+    const result = generate();
+    this.scope = scope;
+    return result;
   }
 
   name(prefix) {
@@ -233,7 +252,7 @@ class Generator {
     this.mode = 'check';
     this.fail = 'return false;';
     this.visiting = new Set();
-    const body = generate();
+    const body = this.inScope(generate);
     this.mode = mode;
     this.fail = fail;
     this.visiting = visiting;
@@ -258,10 +277,15 @@ class Generator {
     const label = this.name('L');
     this.mode = 'check';
     this.fail = `break ${label};`;
+    const written = [...this.sharedMatches.values()].map((shared) => [shared, shared.written]);
     const body = this.generate(type, v, 'undefined');
     this.mode = mode;
     this.fail = fail;
     if (body.length > MAX_INLINE_CODE) {
+      // The inlined code is dropped, with the variables it would have written.
+      written.forEach(([shared, wasWritten]) => {
+        shared.written = wasWritten;
+      });
       return `if (${this.checkFunction(type)}(${v})) { ${onPass} }\n`;
     }
     return `${label}: {\n${body}${onPass}\n}\n`;
@@ -280,7 +304,7 @@ class Generator {
       const { visiting, fail } = this;
       this.visiting = new Set();
       this.fail = 'return false;';
-      const body = this.generate(target, 'x', this.mode === 'check' ? 'undefined' : 'p');
+      const body = this.inScope(() => this.generate(target, 'x', this.mode === 'check' ? 'undefined' : 'p'));
       this.visiting = visiting;
       this.fail = fail;
       this.functions.push(`function ${name}(${params}) {\n${body}${end}\n}\n`);
@@ -291,13 +315,23 @@ class Generator {
   // Like RefType: undefined is checked here, any other value by the target.
   ref(type, v, path) {
     const onUndefined = type.isMandatory ? this.emit(() => `${valuePath(path)} + " is mandatory"`) : '';
-    const fn = this.refFunction(type.getTarget());
+    const target = type.getTarget();
+    const fn = this.refFunction(target);
     let call = `if (!${fn}(${v})) { ${this.fail} }\n`;
     if (this.mode === 'first') {
       const e = this.name('e');
       call = `const ${e} = ${fn}(${v}, ${path});\nif (${e} !== undefined) { return ${e}; }\n`;
     } else if (this.mode === 'all') {
       call = `${fn}(${v}, ${path}, out);\n`;
+    }
+    // Building messages, a field name that has to be built (a key or an index) is built only for an invalid value,
+    // which the boolean function of the target finds first. Valid elements of an array then build no strings.
+    if (this.mode !== 'check' && !/^(undefined|p|"[^"\\]*")$/.test(path)) {
+      const { mode } = this;
+      this.mode = 'check';
+      const check = this.refFunction(target);
+      this.mode = mode;
+      call = `if (!${check}(${v})) {\n${call}}\n`;
     }
     return `if (${v} === undefined) { ${onUndefined} } else {\n${call}}\n`;
   }
@@ -362,9 +396,15 @@ class Generator {
         };
       case ArrayOfType:
         return this.arrayOf(type, v, name, text, known);
+      case UnevaluatedType:
+        return this.unevaluated(type, v, path, name);
       case AllOfType:
         return { checks: [], rest: this.allOf(type, v, name) };
       case ConditionalType: {
+        // Without branches it accepts every value (it is kept for what "if" evaluates, see unevaluated.js).
+        if (!type.thenType && !type.elseType) {
+          return { checks: [], rest: '' };
+        }
         // Only the chosen branch is checked and reported, like ConditionalType.validate().
         const branch = (branchType) => (branchType ? this.generate(branchType, v, name) : '');
         const ok = this.name('ok');
@@ -483,18 +523,64 @@ class Generator {
   }
 
   // Errors of the first type that fails, like AllOfType.validate().
+  // The parts run in order. In 'all' mode only the errors of the first part that fails are reported, like
+  // AllOfType.validate(): each part runs once, building its messages, and a part that adds errors stops the others.
   allOf(type, v, name) {
+    const shared = this.shareMatches(type, v);
+    let code = shared.map(({ vars }) => `let ${vars.join(' = false, ')} = false;\n`).join('');
+    const parts = type.types.map((item) => this.generate(item, v, name)).filter(Boolean);
     if (this.mode !== 'all') {
-      return type.types.map((item) => this.generate(item, v, name)).join('');
+      code += parts.join('');
+    } else if (parts.length === 1) {
+      code += parts[0];
+    } else {
+      const failed = this.name('failed');
+      code += `let ${failed} = false;\n`;
+      parts.forEach((part, i) => {
+        if (i === parts.length - 1) {
+          code += `if (!${failed}) {\n${part}}\n`;
+        } else {
+          const count = this.name('n');
+          code += `if (!${failed}) {\nconst ${count} = out.length;\n${part}if (out.length !== ${count}) { ${failed} = true; }\n}\n`;
+        }
+      });
     }
-    const failed = this.name('failed');
-    let code = `let ${failed} = false;\n`;
-    type.types.forEach((item) => {
-      const ok = this.name('ok');
-      code += `if (!${failed}) {\nlet ${ok} = false;\n${this.inlineCheck(item, v, `${ok} = true;`)}`;
-      code += `if (!${ok}) {\n${failed} = true;\n${this.generate(item, v, name)}}\n}\n`;
+    shared.forEach(({ oneOf, previous }) => {
+      if (previous === undefined) {
+        this.sharedMatches.delete(oneOf);
+      } else {
+        this.sharedMatches.set(oneOf, previous);
+      }
     });
     return code;
+  }
+
+  // The oneOf parts of an allOf whose matching alternatives an "unevaluated*" part of the same allOf needs: oneOf()
+  // records them in variables that the allOf declares, and evaluatedCondition() reads them instead of checking the
+  // alternatives again. They belong to the value in `v` and to the function being written.
+  shareMatches(type, v) {
+    const oneOfs = new Set();
+    type.types
+      .filter((item) => item.constructor === UnevaluatedType)
+      .forEach((unevaluated) =>
+        unevaluated.siblings
+          .filter((sibling) => sibling.constructor === OneOfType && type.types.includes(sibling))
+          .filter((sibling) => staticEvaluatedBy(unevaluated.kind, sibling) === undefined)
+          .forEach((sibling) => oneOfs.add(sibling))
+      );
+    return [...oneOfs].map((oneOf) => {
+      const previous = this.sharedMatches.get(oneOf);
+      const vars = oneOf.types.map(() => this.name('matched'));
+      this.sharedMatches.set(oneOf, { vars, v, scope: this.scope, written: false });
+      return { oneOf, previous, vars };
+    });
+  }
+
+  // The variables holding which alternatives of `oneOf` match the value in `v`, when oneOf() wrote them in the
+  // function being written; undefined otherwise.
+  matchesOf(oneOf, v) {
+    const shared = this.sharedMatches.get(oneOf);
+    return shared && shared.written && shared.v === v && shared.scope === this.scope ? shared.vars : undefined;
   }
 
   // Code for a value that no alternative accepts: the errors of every alternative, like AnyOfType.validate().
@@ -528,10 +614,18 @@ class Generator {
     }
     const m = this.name('m');
     let rest = `let ${m} = 0;\n`;
+    // An "unevaluated*" of the same allOf may reuse which alternatives match (see shareMatches()). When the oneOf
+    // passes, every alternative has been checked.
+    const shared = this.sharedMatches.get(type);
+    const record = shared && shared.v === v && shared.scope === this.scope ? shared : undefined;
     type.types.forEach((item, i) => {
-      const check = this.inlineCheck(item, v, `${m} += 1;`);
+      const onPass = record ? `${m} += 1; ${record.vars[i]} = true;` : `${m} += 1;`;
+      const check = this.inlineCheck(item, v, onPass);
       rest += i > 1 ? `if (${m} < 2) {\n${check}}\n` : check;
     });
+    if (record) {
+      record.written = true;
+    }
     const more = this.emit(text(' must match exactly one schema, but matches more than one'));
     if (this.mode === 'check') {
       rest += `if (${m} !== 1) { ${this.fail} }\n`;
@@ -552,8 +646,31 @@ class Generator {
     if (type.unique) {
       checks.push([`${this.constant(hasDuplicates)}(${v})`, text(' must not have duplicate elements')]);
     }
-    if (type.contains) {
-      // Runs only when the checks before it pass, like ArrayOfType.hasMatch().
+    const min = type.minContains === undefined ? 1 : type.minContains;
+    if (type.contains && (min !== 1 || type.maxContains !== undefined)) {
+      // Counts only as far as the limits need, like ArrayOfType.countMatches().
+      const count = this.name('count');
+      const i = this.name('i');
+      const x = this.name('v');
+      const stop = type.maxContains === undefined ? min : type.maxContains + 1;
+      const pre = `let ${count} = 0;\nfor (let ${i} = 0; ${i} < ${v}.length && ${count} < ${this.number(
+        stop
+      )}; ${i} += 1) {\nconst ${x} = ${v}[${i}];\n${this.inlineCheck(type.contains, x, `${count} += 1;`)}}\n`;
+      const containsChecks = [];
+      if (min > 0) {
+        const atLeast = min === 1 ? 'one matching element' : `${min} matching elements`;
+        containsChecks.push([`${count} < ${this.number(min)}`, text(` must contain at least ${atLeast}`)]);
+      }
+      if (type.maxContains !== undefined) {
+        const atMost = type.maxContains === 1 ? 'one matching element' : `${type.maxContains} matching elements`;
+        containsChecks.push([`${count} > ${this.number(type.maxContains)}`, text(` must contain at most ${atMost}`)]);
+      }
+      if (containsChecks.length > 0) {
+        containsChecks[0].push(pre);
+        checks.push(...containsChecks);
+      }
+    } else if (type.contains) {
+      // Runs only when the checks before it pass, like ArrayOfType.countMatches().
       const found = this.name('found');
       const i = this.name('i');
       const x = this.name('v');
@@ -583,6 +700,278 @@ class Generator {
       rest += `${this.generate(type.type, x, `(${name} + "[" + ${i} + "]")`)}}\n`;
     }
     return { checks, rest };
+  }
+
+  // Name of a function (x, s) that adds to the Set s the keys (kind 'properties') or the indexes ('items') of the
+  // value x that `types` evaluate, and returns true when they evaluate all of them, like evaluated() in
+  // unevaluated.js. `key` names the function: a type, or an UnevaluatedType for the group of its siblings.
+  evaluatedFunction(kind, key, types) {
+    const functions = this.evaluatedFunctions[kind];
+    if (!functions.has(key)) {
+      const name = this.name('evaluated');
+      functions.set(key, name);
+      const body = this.inScope(() => types.map((item) => this.evaluatedCode(kind, item)).join(''));
+      this.functions.push(`function ${name}(x, s) {\n${body}return false;\n}\n`);
+    }
+    return functions.get(key);
+  }
+
+  // Condition on the key in variable `k`: one of the keys or patterns in `known`. Empty when there are none.
+  acceptedKey(known, k) {
+    const keys = [...known.keys];
+    const declared =
+      keys.length <= MAX_INLINE_KEYS
+        ? keys.map((key) => `${k} === ${JSON.stringify(key)}`)
+        : [`${this.constant(known.keys)}.has(${k})`];
+    const terms = [...declared, ...known.patterns.map((pattern) => `${this.constant(pattern)}.test(${k})`)];
+    // In parentheses, so it can be combined with && in a larger condition.
+    return terms.length > 1 ? `(${terms.join(' || ')})` : terms.join('');
+  }
+
+  // Statements of an evaluated function (value in x, Set in s) for a part that evaluates the same for every value.
+  staticEvaluatedCode(kind, known) {
+    if (known.all) {
+      return 'return true;\n';
+    }
+    if (kind === 'items') {
+      const i = this.name('i');
+      return known.prefix > 0
+        ? `for (let ${i} = 0; ${i} < ${known.prefix} && ${i} < x.length; ${i} += 1) { s.add(${i}); }\n`
+        : '';
+    }
+    const k = this.name('k');
+    const accepted = this.acceptedKey(known, k);
+    return accepted ? `for (const ${k} in x) {\nif (H.call(x, ${k}) && (${accepted})) { s.add(${k}); }\n}\n` : '';
+  }
+
+  // Statements of an evaluated function (value in x, Set in s) for what `type` evaluates.
+  evaluatedCode(kind, type) {
+    const known = staticEvaluatedBy(kind, type);
+    if (known !== undefined) {
+      return this.staticEvaluatedCode(kind, known);
+    }
+    const check = (item) => this.checkFunction(item);
+    const code = (item) => this.evaluatedCode(kind, item);
+    const onMatch = (item) => `if (${check(item)}(x)) {\n${code(item)}}\n`;
+    switch (type.constructor) {
+      case Schema:
+      case ClosedSchema: {
+        // Only its "dependentSchemas" depend on the value.
+        const declared = {
+          all: false,
+          keys: new Set(type.propertyKeys || type.keys),
+          patterns: type.patternTypes.map(({ pattern }) => pattern),
+          prefix: 0,
+        };
+        let result = this.staticEvaluatedCode(kind, declared);
+        type.dependencies
+          .filter((dependency) => dependency.type)
+          .forEach((dependency) => {
+            result += `if (H.call(x, ${JSON.stringify(dependency.key)})) {\n${onMatch(dependency.type)}}\n`;
+          });
+        return result;
+      }
+      case ArrayOfType: {
+        // Only its "contains" depends on the value.
+        const prefix = Array.isArray(type.type) ? type.type.length : 0;
+        const i = this.name('i');
+        const tuple = this.staticEvaluatedCode(kind, { all: false, keys: new Set(), patterns: [], prefix });
+        const contains = `if (${check(type.contains)}(x[${i}])) { s.add(${i}); }\n`;
+        return `${tuple}for (let ${i} = 0; ${i} < x.length; ${i} += 1) {\n${contains}}\n`;
+      }
+      case AllOfType:
+        return type.types.map(code).join('');
+      case AnyOfType:
+        return type.types.map(onMatch).join('');
+      case OneOfType: {
+        // What the one alternative that matches evaluates, when exactly one does.
+        const oks = type.types.map(() => this.name('ok'));
+        const matches = type.types.map((item, i) => `const ${oks[i]} = ${check(item)}(x);\n`).join('');
+        const chosen = type.types.map((item, i) => `if (${oks[i]}) {\n${code(item)}}\n`).join('');
+        return `${matches}if (${oks.join(' + ')} === 1) {\n${chosen}}\n`;
+      }
+      case ConditionalType: {
+        // What "if" evaluates counts when the value satisfies it, with the branch taken.
+        const branch = (item) => (item ? onMatch(item) : '');
+        const ifTrue = `${code(type.ifType)}${branch(type.thenType)}`;
+        return `if (${check(type.ifType)}(x)) {\n${ifTrue}} else {\n${branch(type.elseType)}}\n`;
+      }
+      case RefType: {
+        const target = type.getTarget();
+        return `if (${this.evaluatedFunction(kind, target, [target])}(x, s)) { return true; }\n`;
+      }
+      case WhenType:
+        return type.jsonType === JSON_TYPES[kind] ? code(type.type) : '';
+      case UnevaluatedType: {
+        // Evaluates everything the other keywords leave, when those elements satisfy it.
+        const siblings = type.siblings.map(code).join('');
+        return type.kind === kind ? `if (${check(type)}(x)) { return true; }\n${siblings}` : siblings;
+      }
+      default:
+        return '';
+    }
+  }
+
+  // Condition that is true when `type` evaluates the key (kind 'properties') or index ('items') in variable `k` of the
+  // value in `v`, like evaluated() in unevaluated.js. It adds to `prelude` the statements that compute, once, which
+  // subschemas the value satisfies. Undefined when a reference leads to a part that depends on the value, which may
+  // be recursive: an evaluated function handles that case.
+  evaluatedCondition(kind, type, v, k, prelude) {
+    const known = staticEvaluatedBy(kind, type);
+    if (known !== undefined) {
+      if (known.all) {
+        return 'true';
+      }
+      if (kind === 'items') {
+        return known.prefix > 0 ? `${k} < ${known.prefix}` : 'false';
+      }
+      return this.acceptedKey(known, k) || 'false';
+    }
+    const matches = (item) => {
+      const ok = this.name('ok');
+      prelude.push(`const ${ok} = ${this.checkFunction(item)}(${v});\n`);
+      return ok;
+    };
+    const condition = (item) => this.evaluatedCondition(kind, item, v, k, prelude);
+    const any = (parts) => (parts.some((part) => part === undefined) ? undefined : `(${parts.join(' || ')})`);
+    switch (type.constructor) {
+      case Schema:
+      case ClosedSchema: {
+        // Only its "dependentSchemas" depend on the value.
+        const declared = {
+          keys: new Set(type.propertyKeys || type.keys),
+          patterns: type.patternTypes.map(({ pattern }) => pattern),
+        };
+        const parts = [this.acceptedKey(declared, k) || 'false'];
+        type.dependencies
+          .filter((dependency) => dependency.type)
+          .forEach((dependency) => {
+            const ok = this.name('ok');
+            const literal = JSON.stringify(dependency.key);
+            prelude.push(`const ${ok} = H.call(${v}, ${literal}) && ${this.checkFunction(dependency.type)}(${v});\n`);
+            const inner = condition(dependency.type);
+            parts.push(inner === undefined ? undefined : `(${ok} && ${inner})`);
+          });
+        return any(parts);
+      }
+      case ArrayOfType: {
+        // Only its "contains" depends on the value.
+        const prefix = Array.isArray(type.type) ? type.type.length : 0;
+        const contains = `${this.checkFunction(type.contains)}(${v}[${k}])`;
+        return prefix > 0 ? `(${k} < ${prefix} || ${contains})` : contains;
+      }
+      case AllOfType:
+        return any(type.types.map(condition));
+      case AnyOfType:
+        return any(
+          type.types.map((item) => {
+            const inner = condition(item);
+            return inner === undefined ? undefined : `(${matches(item)} && ${inner})`;
+          })
+        );
+      case OneOfType: {
+        // What the one alternative that matches evaluates, when exactly one does. The oneOf may have recorded which
+        // match already.
+        const oks = this.matchesOf(type, v) || type.types.map(matches);
+        const one = this.name('one');
+        prelude.push(`const ${one} = ${oks.join(' + ')} === 1;\n`);
+        const chosen = any(
+          type.types.map((item, i) => {
+            const inner = condition(item);
+            return inner === undefined ? undefined : `(${oks[i]} && ${inner})`;
+          })
+        );
+        return chosen === undefined ? undefined : `(${one} && ${chosen})`;
+      }
+      case ConditionalType: {
+        // What "if" evaluates counts when the value satisfies it, with the branch taken.
+        const okIf = matches(type.ifType);
+        const parts = [];
+        const ifPart = condition(type.ifType);
+        parts.push(ifPart === undefined ? undefined : `(${okIf} && ${ifPart})`);
+        [
+          [type.thenType, okIf],
+          [type.elseType, `!${okIf}`],
+        ].forEach(([branch, taken]) => {
+          if (branch) {
+            const ok = this.name('ok');
+            prelude.push(`const ${ok} = ${taken} && ${this.checkFunction(branch)}(${v});\n`);
+            const inner = condition(branch);
+            parts.push(inner === undefined ? undefined : `(${ok} && ${inner})`);
+          }
+        });
+        return any(parts);
+      }
+      case WhenType:
+        return type.jsonType === JSON_TYPES[kind] ? condition(type.type) : 'false';
+      case UnevaluatedType: {
+        // Evaluates everything the other keywords leave, when those elements satisfy it.
+        const siblings = any(type.siblings.map(condition));
+        if (type.kind !== kind || siblings === undefined) {
+          return siblings;
+        }
+        return `(${matches(type)} || ${siblings})`;
+      }
+      case RefType:
+        // Its target depends on the value (a fixed one is handled above), and may lead back here.
+        return undefined;
+      default:
+        return 'false';
+    }
+  }
+
+  // "unevaluatedProperties"/"unevaluatedItems": a loop over the keys or elements the other keywords leave. The loop
+  // skips directly what the keywords that evaluate the same for every value evaluate, like "additionalProperties",
+  // and what the others evaluate for the value through a condition on the subschemas it satisfies (or, when a
+  // reference makes that impossible, through a Set that a generated function fills first).
+  unevaluated(type, v, path, name) {
+    const isFixed = (item) => staticEvaluatedBy(type.kind, item) !== undefined;
+    const known = staticEvaluatedByAll(type.kind, type.siblings.filter(isFixed));
+    const varying = type.siblings.filter((item) => !isFixed(item));
+    if (known.all) {
+      return { checks: [], rest: '' };
+    }
+    // Key (or index) variable of the loop, and the condition for what the varying siblings evaluate.
+    const k = this.name(type.kind === 'items' ? 'i' : 'k');
+    const prelude = [];
+    const conditions = varying.map((item) => this.evaluatedCondition(type.kind, item, v, k, prelude));
+    let evaluated = conditions.includes(undefined) ? undefined : conditions.join(' || ');
+    let collect = prelude.join('');
+    let close = '';
+    if (evaluated === undefined) {
+      const done = this.name('done');
+      collect = `const ${done} = new Set();\nif (!${this.evaluatedFunction(type.kind, type, varying)}(${v}, ${done})) {\n`;
+      close = '}\n';
+      evaluated = `${done}.has(${k})`;
+    }
+    const x = this.name('v');
+    if (type.kind === 'items') {
+      const code = this.generate(type.type, x, `(${name} + "[" + ${k} + "]")`);
+      if (!code) {
+        return { checks: [], rest: '' };
+      }
+      const skip = evaluated ? `if (${evaluated}) { continue; }\n` : '';
+      let rest = `if (Array.isArray(${v})) {\n${collect}for (let ${k} = ${known.prefix}; ${k} < ${v}.length; ${k} += 1) {\n`;
+      rest += `${skip}const ${x} = ${v}[${k}];\n${code}}\n${close}}\n`;
+      return { checks: [], rest };
+    }
+    const keyName = keyPath(path, k);
+    let code;
+    if (type.type.constructor === NeverType) {
+      code = this.emit(() => `"Unexpected key: " + ${keyName}`);
+    } else {
+      const inner = this.generate(type.type, x, keyName);
+      // A schema that accepts every value gives no code.
+      if (!inner) {
+        return { checks: [], rest: '' };
+      }
+      code = `const ${x} = ${v}[${k}];\n${inner}`;
+    }
+    const accepted = [this.acceptedKey(known, k), evaluated].filter(Boolean).join(' || ');
+    const skip = accepted ? ` || ${accepted}` : '';
+    let rest = `if (typeof ${v} === 'object' && !Array.isArray(${v})) {\n${collect}for (const ${k} in ${v}) {\n`;
+    rest += `if (!H.call(${v}, ${k})${skip}) { continue; }\n${code}}\n${close}}\n`;
+    return { checks: [], rest };
   }
 
   // Same order as Schema.errors(): declared keys, then extra keys, then property counts.

@@ -5,9 +5,9 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Dependencies: 0](https://img.shields.io/badge/dependencies-0-brightgreen.svg)](package.json)
 
-Fast schema validation for JavaScript. Describe data with a small schema DSL or with JSON Schema (draft-07), and
-schiva compiles it into a JavaScript function generated for that schema, so validating is several times faster than
-walking the schema for every value.
+Fast schema validation for JavaScript. Describe data with a small schema DSL or with JSON Schema (draft-07, 2019-09 or
+2020-12), and schiva compiles it into a JavaScript function generated for that schema, so validating is several times
+faster than walking the schema for every value.
 
 **Documentation: [schiva.js.org](https://schiva.js.org)**
 
@@ -30,11 +30,13 @@ walking the schema for every value.
 
 ## Features
 
-- **Two schema languages, one engine**: a small DSL (`String()`, `Integer({ min: 18 })`...) and JSON Schema draft-07
-  compile to the same types and the same generated code.
+- **Two schema languages, one engine**: a small DSL (`String()`, `Integer({ min: 18 })`...) and JSON Schema (draft-07,
+  2019-09 and 2020-12) compile to the same types and the same generated code.
 - **Complete draft-07**: passes the whole [JSON-Schema-Test-Suite](https://github.com/json-schema-org/JSON-Schema-Test-Suite)
   for draft-07 (929 of 929 tests), including `$ref` with JSON pointers, `$id` base URIs, anchors, recursive schemas
   and references to other documents.
+- **Drafts 2019-09 and 2020-12** (in progress): everything, `unevaluatedProperties` and `unevaluatedItems` included,
+  but dynamic references (`$recursiveRef`, `$dynamicRef`), which throw when compiling. See [Drafts](#drafts).
 - **Readable errors** with the path of each field: `lines[12].price must be a number`.
 - **Three modes**: every error, the first error only, or just `true`/`false`.
 - **Fast**: faster than ajv in every [benchmark](#performance) we run, and about 50 times faster at compiling.
@@ -196,10 +198,10 @@ node.compile()({ value: 1, children: [{ value: 2, children: [{ value: 'x' }] }] 
 
 ## JSON Schema
 
-`fromJsonSchema(json, options)` converts a JSON Schema (draft-07) into the same types, and
-`compileJsonSchema(json, options)` compiles it. Every validation keyword of draft-07 is supported, along with
-`definitions` and `$ref` (JSON pointers, `$id` base URIs and anchors, recursive schemas). String lengths count Unicode
-code points, as the specification says.
+`fromJsonSchema(json, options)` converts a JSON Schema into the same types, and `compileJsonSchema(json, options)`
+compiles it. Every validation keyword of draft-07 is supported, along with `definitions` (or `$defs`) and `$ref` (JSON
+pointers, `$id` base URIs and anchors, recursive schemas). String lengths count Unicode code points, as the
+specification says.
 
 A keyword schiva does not know throws when compiling, with the place where it was found:
 
@@ -210,7 +212,57 @@ compileJsonSchema({ type: 'string', maxLenght: 10 });
 
 Annotations (`title`, `description`, `default`, `examples`, `$comment`, `readOnly`, `writeOnly`, `deprecated`) are
 accepted and ignored. So is **`format`**: draft-07 makes checking it optional, and schiva does not check it. Use
-`pattern`, or a [type of your own](#types-of-your-own), for values such as emails or dates.
+`pattern`, or a [type of your own](#types-of-your-own), for values such as emails or dates. The content keywords
+(`contentMediaType`, `contentEncoding`, `contentSchema`) are annotations too.
+
+### Drafts
+
+The draft comes from `options.draft` (`'draft-07'`, `'2019-09'` or `'2020-12'`), or else from the `$schema` of the
+schema. Without either, or with another `$schema` (such as draft-04 or draft-06), the schema is read as draft-07.
+
+```js
+const validate = compileJsonSchema({
+  $schema: 'https://json-schema.org/draft/2020-12/schema',
+  prefixItems: [{ type: 'string' }, { type: 'integer' }],
+  items: false,
+});
+
+validate(['a', 1]); // []
+validate(['a', 1, 2]); // ['Value[2] is not allowed']
+```
+
+Drafts 2019-09 and 2020-12 add, and schiva supports:
+
+- `$defs` and `$anchor` (and `$dynamicAnchor` as a plain anchor for `$ref`).
+- `dependentRequired` and `dependentSchemas`, which split `dependencies` in two.
+- `minContains` and `maxContains`.
+- `prefixItems` (2020-12), which takes over the tuple form of `items`: in 2020-12 `items` is a schema for the elements
+  after `prefixItems`, and `additionalItems` is gone.
+- Keywords next to `$ref` apply too, where draft-07 ignores them.
+- `unevaluatedProperties` and `unevaluatedItems`: the keys or elements that no other keyword of the schema evaluated,
+  directly or through `allOf`, `anyOf`, `oneOf`, `if`/`then`/`else`, `$ref` or `dependentSchemas`, must satisfy them.
+
+```js
+const validate = compileJsonSchema({
+  $schema: 'https://json-schema.org/draft/2020-12/schema',
+  $defs: { base: { properties: { id: { type: 'integer' } } } },
+  $ref: '#/$defs/base',
+  properties: { name: { type: 'string' } },
+  unevaluatedProperties: false,
+});
+
+validate({ id: 1, name: 'a' }); // []
+validate({ id: 1, name: 'a', extra: true }); // ['Unexpected key: Value.extra']
+```
+
+When the keys those keywords evaluate are the same for every value, as with `$ref`, `allOf` and `properties`, the
+check compiles to a loop over the other keys, as fast as `additionalProperties`. With `anyOf`, `oneOf`, `if` or
+`dependentSchemas` it depends on the value, and the generated code works it out first.
+
+Not supported yet: `$recursiveRef` and `$dynamicRef`. They throw when compiling, as does referencing the 2019-09 or
+2020-12 meta-schemas, which use them. Measured with the JSON-Schema-Test-Suite (`node bench/conformance.js
+draft2020-12`), schiva passes 1218 of 1261 tests of 2019-09 and 1250 of 1301 of 2020-12 (ajv: 1233 and 1239); the
+tests it does not pass use those keywords, and one needs a custom meta-schema that turns validation off.
 
 ### Several documents
 
@@ -288,21 +340,50 @@ not in public issues.
 
 Compared with ajv and the other validators of
 [json-schema-benchmark](https://github.com/ebdrup/json-schema-benchmark), each measurement in its own process
-(see [`bench/`](bench)):
+(see [`bench/`](bench)). Higher is better; each library is compared in the same mode (first error or all errors).
 
-| | schiva | ajv | @exodus/schemasafe |
+**JSON-Schema-Test-Suite**, in runs per second over the test groups every validator passes. For drafts 2019-09 and
+2020-12 only the validators that implement them run (ajv with its `Ajv2019` and `Ajv2020` classes):
+
+| | draft-07 | 2019-09 | 2020-12 |
 |---|---|---|---|
-| Test suite, tests passed | **929** of 929 | 921 (8 wrong) | 905 |
-| Test suite, first error (runs/sec) | **118k** | 62k | 99k |
-| Test suite, all errors (runs/sec) | **88k** | 54k | 65k |
-| Order with 20 lines, valid, first error (validations/sec) | **2.26M** | 0.76M | 0.54M |
-| Order with 20 lines, invalid, all errors (validations/sec) | **1.86M** | 0.43M | 0.32M |
-| Compiling a schema (per sec) | **10k** | 0.2k | 0.8k |
+| schiva, first error | **114k** | **21.8k** | **21.4k** |
+| ajv, first error | 61k | 5k–15k ¹ | 5k–15k ¹ |
+| @exodus/schemasafe, first error | 103k | 18.0k | 16.2k |
+| schiva, all errors | **89k** | **16.7k** | **17.6k** |
+| ajv, all errors | 54k | 5k–12k ¹ | 5k–12k ¹ |
+| @exodus/schemasafe, all errors | 68k | 10.4k | 9.4k |
+| schiva, true/false | **172k** | **32.1k** | **31.1k** |
+| @exodus/schemasafe, true/false | 152k | 28.3k | 27.1k |
+| Tests passed: schiva / ajv / schemasafe | **929** / 921 / 905 | 1218 / 1233 / 1228 | 1250 / 1239 / 1263 |
+
+¹ ajv's speed on these two suites changes from one process to the next, between the two numbers given.
+
+On drafts 2019-09 and 2020-12, json-schema-library passes the most tests (1260 and 1291), at about 1/400 of the speed of
+schiva; the tests schiva misses use dynamic references.
+
+**Payloads**, in validations per second (compiling: schemas per second):
+
+| | schiva, first error | ajv, first error | schiva, all errors | ajv, all errors |
+|---|---|---|---|---|
+| moltar strict, valid | **32.8M** | 28.6M | **30.9M** | 29.4M |
+| moltar strict, invalid | **75.2M** | 34.4M | **20.1M** | 17.0M |
+| Order with 20 lines, valid | **2.23M** | 0.75M | **2.23M** | 0.72M |
+| Order with 20 lines, invalid | **16.9M** | 12.2M | **1.94M** | 0.44M |
+| Order 2020-12 (`$ref`, `allOf`, `unevaluatedProperties`), valid | **2.33M** | 0.66M | **2.18M** | 0.65M |
+| Order 2020-12, invalid | **29.3M** | 15.0M | **1.82M** | 0.38M |
+| Payment 2020-12 (`oneOf` and `unevaluatedProperties`), valid | **16.1M** | 9.2M | **15.2M** | 8.1M |
+| Payment 2020-12, invalid | **13.5M** | 7.8M | **11.2M** | 6.5M |
+| Compiling the order schema | **9.3k** | 0.19k | **8.9k** | 0.22k |
 
 ```sh
-pnpm run bench         # every validator in its own process (about 8 minutes)
+pnpm run bench         # every validator in its own process (about 15 minutes)
 pnpm run bench:quick   # every validator in one process (about a minute)
+pnpm run conformance   # tests passed by schiva and ajv, file by file, for one draft
 ```
+
+Benchmarks depend on the machine: run them with nothing else busy, as a validator measured while the computer is
+loaded looks several times slower than it is.
 
 ## FAQ
 
@@ -314,8 +395,8 @@ pnpm run bench:quick   # every validator in one process (about a minute)
 front are ready for that, and building them is cheap. If you only need to know whether a value is valid, use
 `{ errors: false }`.
 
-**Does it support draft 2019-09 or 2020-12?** Not yet: schiva implements draft-07. Keywords from later drafts, such as
-`unevaluatedProperties` or `$defs`, throw when compiling.
+**Does it support draft 2019-09 or 2020-12?** Almost: everything but dynamic references (`$recursiveRef`,
+`$dynamicRef`), which throw when compiling. See [Drafts](#drafts).
 
 **Does it check `format`?** No, see [JSON Schema](#json-schema).
 

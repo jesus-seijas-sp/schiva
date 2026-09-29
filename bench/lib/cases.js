@@ -93,11 +93,117 @@ orderInvalid.lines[5].qty = 0;
 orderInvalid.lines[12].price = '12';
 orderInvalid.customer.email = 'nope';
 
+// 3) The same order in draft 2020-12, written the way that draft allows: base schemas in $defs extended with $ref
+// and allOf, and unevaluatedProperties instead of additionalProperties. What the other keywords evaluate is the same
+// for every value.
+const DRAFT_2020 = 'https://json-schema.org/draft/2020-12/schema';
+const order2020Schema = {
+  $schema: DRAFT_2020,
+  $defs: {
+    entity: { type: 'object', required: ['id'], properties: { id: orderSchema.properties.id } },
+    line: {
+      type: 'object',
+      required: ['sku', 'qty', 'price'],
+      properties: {
+        sku: { type: 'string', minLength: 3, maxLength: 32 },
+        qty: { type: 'integer', minimum: 1, maximum: 1000 },
+        price: { type: 'number', exclusiveMinimum: 0 },
+      },
+    },
+  },
+  type: 'object',
+  allOf: [{ $ref: '#/$defs/entity' }],
+  required: ['status', 'customer', 'lines', 'total', 'currency', 'createdAt'],
+  properties: {
+    status: orderSchema.properties.status,
+    customer: orderSchema.properties.customer,
+    lines: {
+      type: 'array',
+      minItems: 1,
+      maxItems: 200,
+      items: {
+        $ref: '#/$defs/line',
+        properties: { discount: orderSchema.properties.lines.items.properties.discount },
+        unevaluatedProperties: false,
+      },
+    },
+    total: orderSchema.properties.total,
+    currency: orderSchema.properties.currency,
+    createdAt: orderSchema.properties.createdAt,
+    notes: orderSchema.properties.notes,
+  },
+  unevaluatedProperties: false,
+};
+const order2020Invalid = JSON.parse(JSON.stringify(orderInvalid));
+order2020Invalid.lines[3].coupon = 'X';
+
+// 4) A payment whose variant decides the keys it may have: oneOf and unevaluatedProperties, where what the other
+// keywords evaluate depends on the value.
+const paymentSchema = {
+  $schema: DRAFT_2020,
+  type: 'object',
+  required: ['id', 'amount', 'method'],
+  properties: { id: { type: 'string' }, amount: { type: 'number', exclusiveMinimum: 0 }, method: { type: 'string' } },
+  oneOf: [
+    {
+      properties: {
+        method: { const: 'card' },
+        card: { type: 'string', pattern: '^[0-9]{16}$' },
+        expiry: { type: 'string', pattern: '^[0-9]{2}/[0-9]{2}$' },
+      },
+      required: ['card', 'expiry'],
+    },
+    {
+      properties: { method: { const: 'transfer' }, iban: { type: 'string', minLength: 15, maxLength: 34 } },
+      required: ['iban'],
+    },
+  ],
+  unevaluatedProperties: false,
+};
+const paymentValid = { id: 'PAY-1', amount: 25.5, method: 'card', card: '4111111111111111', expiry: '12/29' };
+const paymentInvalid = {
+  id: 'PAY-2',
+  amount: 25.5,
+  method: 'card',
+  card: '4111111111111111',
+  expiry: '12/29',
+  iban: 'X',
+};
+
+// `draft` names the validators that run a case (see validators.js forDraft); draft-07 when it is not given.
 const cases = [
   { name: 'moltar strict · valid', schema: moltarSchema, data: moltarValid, expect: true },
   { name: 'moltar strict · invalid', schema: moltarSchema, data: moltarInvalid, expect: false },
   { name: 'order (20 lines) · valid', schema: orderSchema, data: orderValid, expect: true },
   { name: 'order (20 lines) · invalid', schema: orderSchema, data: orderInvalid, expect: false },
+  {
+    name: 'order 2020-12, unevaluatedProperties (20 lines) · valid',
+    draft: 'draft2020-12',
+    schema: order2020Schema,
+    data: orderValid,
+    expect: true,
+  },
+  {
+    name: 'order 2020-12, unevaluatedProperties (20 lines) · invalid',
+    draft: 'draft2020-12',
+    schema: order2020Schema,
+    data: order2020Invalid,
+    expect: false,
+  },
+  {
+    name: 'payment 2020-12, oneOf + unevaluatedProperties · valid',
+    draft: 'draft2020-12',
+    schema: paymentSchema,
+    data: paymentValid,
+    expect: true,
+  },
+  {
+    name: 'payment 2020-12, oneOf + unevaluatedProperties · invalid',
+    draft: 'draft2020-12',
+    schema: paymentSchema,
+    data: paymentInvalid,
+    expect: false,
+  },
 ];
 
 // Schema whose compile time is measured.

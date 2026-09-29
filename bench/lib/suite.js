@@ -1,18 +1,44 @@
-// JSON-Schema-Test-Suite (draft-07): the test groups, the documents they reference, and each validator's results.
+// JSON-Schema-Test-Suite (draft-07, 2019-09 and 2020-12): the test groups, the documents they reference, and each
+// validator's results.
 const fs = require('fs');
 const path = require('path');
 
 const SUITE = path.dirname(require.resolve('json-schema-test-suite/package.json'));
 
+// Drafts by the name of their folder in the suite, with the meta-schema files that ajv ships for them.
+const DRAFTS = {
+  draft7: ['ajv/dist/refs/json-schema-draft-07.json'],
+  'draft2019-09': 'ajv/dist/refs/json-schema-2019-09',
+  'draft2020-12': 'ajv/dist/refs/json-schema-2020-12',
+};
+
+const walk = (dir) =>
+  fs
+    .readdirSync(dir, { withFileTypes: true })
+    .flatMap((entry) => (entry.isDirectory() ? walk(path.join(dir, entry.name)) : [path.join(dir, entry.name)]));
+
+function checkDraft(draft) {
+  if (!DRAFTS[draft]) {
+    throw new Error(`Unknown draft "${draft}": use one of ${Object.keys(DRAFTS).join(', ')}`);
+  }
+}
+
+// The meta-schemas of a draft.
+function metaSchemas(draft) {
+  const meta = DRAFTS[draft];
+  const files = Array.isArray(meta)
+    ? meta.map((file) => require.resolve(file))
+    : walk(path.dirname(require.resolve(`${meta}/schema.json`))).filter((file) => file.endsWith('.json'));
+  return files.map((file) => JSON.parse(fs.readFileSync(file, 'utf8')));
+}
+
 // Documents the tests reference, given to every validator: the suite's remotes, which its runner serves at
-// http://localhost:1234/ (leaving out the folders for other drafts), and the draft-07 meta-schema.
-function loadRemotes() {
+// http://localhost:1234/ (leaving out the folders for other drafts), and the meta-schemas of the draft by their "$id".
+function loadRemotes(draft = 'draft7') {
+  checkDraft(draft);
   const remotesDir = path.join(SUITE, 'remotes');
-  const skip = /^(draft3|draft4|draft6|draft2019-09|draft2020-12|draft-next|v1)\b/;
-  const walk = (dir) =>
-    fs
-      .readdirSync(dir, { withFileTypes: true })
-      .flatMap((entry) => (entry.isDirectory() ? walk(path.join(dir, entry.name)) : [path.join(dir, entry.name)]));
+  const others = ['draft3', 'draft4', 'draft6', 'draft-next', 'v1', ...Object.keys(DRAFTS)].filter((d) => d !== draft);
+  const skip = new RegExp(`^(${others.join('|')})/`);
   const remotes = {};
   walk(remotesDir)
     .map((file) => path.relative(remotesDir, file).split(path.sep).join('/'))
@@ -20,14 +46,16 @@ function loadRemotes() {
     .forEach((file) => {
       remotes[`http://localhost:1234/${file}`] = JSON.parse(fs.readFileSync(path.join(remotesDir, file), 'utf8'));
     });
-  // eslint-disable-next-line global-require -- the meta-schema file that ajv ships
-  remotes['http://json-schema.org/draft-07/schema'] = require('ajv/dist/refs/json-schema-draft-07.json');
+  metaSchemas(draft).forEach((schema) => {
+    remotes[schema.$id.replace(/#$/, '')] = schema;
+  });
   return remotes;
 }
 
-// Every test group of the draft-07 suite, in a stable order: { file, description, schema, tests }.
-function loadGroups() {
-  const dir = path.join(SUITE, 'tests/draft7');
+// Every test group of a draft's suite, in a stable order: { file, description, schema, tests }.
+function loadGroups(draft = 'draft7') {
+  checkDraft(draft);
+  const dir = path.join(SUITE, 'tests', draft);
   const groups = [];
   fs.readdirSync(dir)
     .filter((f) => f.endsWith('.json'))
@@ -129,6 +157,7 @@ function summary(groups, results, common, speed, mode) {
 }
 
 module.exports = {
+  DRAFTS,
   loadRemotes,
   loadGroups,
   compileGroup,

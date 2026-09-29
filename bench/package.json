@@ -10,7 +10,8 @@
     "object": "node --no-deprecation isolated.js object",
     "quick": "pnpm run quick:suite && pnpm run quick:object",
     "quick:suite": "node --no-deprecation suite-bench.js",
-    "quick:object": "node --no-deprecation object-bench.js"
+    "quick:object": "node --no-deprecation object-bench.js",
+    "conformance": "node --no-deprecation conformance.js"
   },
   "dependencies": {
     "@cfworker/json-schema": "^4.1.1",

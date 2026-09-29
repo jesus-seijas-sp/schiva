@@ -14,6 +14,7 @@ pnpm run object          # realistic payloads only, isolated
 pnpm run quick           # both benchmarks, every validator in one process (about a minute)
 pnpm run quick:suite
 pnpm run quick:object
+pnpm run conformance draft2020-12   # schiva and ajv on the suite of one draft, file by file
 ```
 
 Raw numbers are written to `bench/results/` (git-ignored): `suite.json` and `object.json` for the isolated mode,
