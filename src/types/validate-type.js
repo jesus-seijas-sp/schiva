@@ -91,8 +91,46 @@ function toErrors(result) {
   return result ? [result] : [];
 }
 
+function isPlainObject(value) {
+  if (value === null || typeof value !== 'object') {
+    return false;
+  }
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
+
+// Normalizes an option that holds a type. A plain object stands for new Schema(object), as it does for a key of a
+// Schema; other objects (types, schemas) are kept; anything else throws now instead of failing when validating.
+function toType(value, name) {
+  if (value === undefined || value instanceof ValidateType) {
+    return value;
+  }
+  if (isPlainObject(value)) {
+    // eslint-disable-next-line global-require -- schema.js requires this module
+    const { Schema } = require('../schema');
+    return new Schema(value);
+  }
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new TypeError(`${name} must be a type or an object of types`);
+  }
+  return value;
+}
+
+function toTypes(values, name) {
+  if (values === undefined) {
+    return values;
+  }
+  if (!Array.isArray(values)) {
+    throw new TypeError(`${name} must be an array of types`);
+  }
+  return values.map((value, i) => toType(value, `${name}[${i}]`));
+}
+
 module.exports = {
   ValidateType,
   hasErrors,
   toErrors,
+  isPlainObject,
+  toType,
+  toTypes,
 };

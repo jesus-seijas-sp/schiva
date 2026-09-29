@@ -1,9 +1,9 @@
-const { ValidateType } = require('./validate-type');
+const { ValidateType, toTypes } = require('./validate-type');
 
 class AnyOfType extends ValidateType {
   constructor(options = {}) {
     super(options);
-    this.types = options.types;
+    this.types = toTypes(options.types, 'AnyOf types');
   }
 
   validate(value, fieldName = 'Value') {

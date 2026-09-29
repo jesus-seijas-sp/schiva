@@ -1,13 +1,13 @@
-const { ValidateType } = require('./validate-type');
+const { ValidateType, toType } = require('./validate-type');
 
 // When the value satisfies `ifType` it must satisfy `thenType`, otherwise `elseType`; a missing branch accepts
 // anything. Only the errors of the branch are reported, like JSON Schema if/then/else.
 class ConditionalType extends ValidateType {
   constructor(options = {}) {
     super(options);
-    this.ifType = options.ifType;
-    this.thenType = options.thenType;
-    this.elseType = options.elseType;
+    this.ifType = toType(options.ifType, 'Conditional ifType');
+    this.thenType = toType(options.thenType, 'Conditional thenType');
+    this.elseType = toType(options.elseType, 'Conditional elseType');
   }
 
   branch(value) {

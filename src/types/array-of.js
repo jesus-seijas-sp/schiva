@@ -1,18 +1,20 @@
 const { hasDuplicates } = require('./has-duplicates');
-const { ValidateType } = require('./validate-type');
+const { ValidateType, isPlainObject, toType, toTypes } = require('./validate-type');
 
 class ArrayOfType extends ValidateType {
   constructor(options = {}) {
     super(options);
     // A type for every element, or an array of types for the elements at each position (a tuple).
-    this.type = options.type;
+    this.type = Array.isArray(options.type)
+      ? toTypes(options.type, 'ArrayOf type')
+      : toType(options.type, 'ArrayOf type');
     this.min = options.min;
     this.max = options.max;
     this.unique = options.unique;
     // At least one element must satisfy it.
-    this.contains = options.contains;
+    this.contains = toType(options.contains, 'ArrayOf contains');
     // With a tuple, the elements after its last position must satisfy it.
-    this.additionalType = options.additionalType;
+    this.additionalType = toType(options.additionalType, 'ArrayOf additionalType');
   }
 
   hasMatch(value) {
@@ -115,15 +117,27 @@ function ArrayOf(options) {
   return new ArrayOfType(options);
 }
 
+const OPTION_KEYS = ['type', 'min', 'max', 'unique', 'contains', 'additionalType', 'isMandatory', 'isNullable'];
+
+// The first argument of arrOf() is the options when it is a plain object that is empty or has an option key;
+// otherwise it is the type of the elements (a type, a schema, or a plain object of types).
+function isOptions(value) {
+  if (!isPlainObject(value)) {
+    return false;
+  }
+  const keys = Object.keys(value);
+  return keys.length === 0 || keys.some((key) => OPTION_KEYS.includes(key));
+}
+
 function arrOf(type, min, max, isMandatory = true, isNullable = false) {
-  if (type !== undefined && type !== null && typeof type === 'object') {
+  if (isOptions(type)) {
     return new ArrayOfType(type);
   }
   return new ArrayOfType({ type, min, max, isMandatory, isNullable });
 }
 
 function oarrOf(type, min, max, isMandatory = false, isNullable = false) {
-  if (type !== undefined && type !== null && typeof type === 'object') {
+  if (isOptions(type)) {
     return new ArrayOfType({ isMandatory: false, ...type });
   }
   return new ArrayOfType({ type, min, max, isMandatory, isNullable });

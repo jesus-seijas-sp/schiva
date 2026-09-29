@@ -1,4 +1,4 @@
-const { ValidateType } = require('./validate-type');
+const { ValidateType, toType } = require('./validate-type');
 
 // Validates with the type it refers to, which is set once references are resolved; recursive schemas refer back to a
 // type that contains the reference. Only undefined is handled here (isMandatory); null and other values go to the
@@ -7,7 +7,7 @@ class RefType extends ValidateType {
   constructor(options = {}) {
     super(options);
     this.ref = options.ref;
-    this.target = options.target;
+    this.target = toType(options.target, 'Ref target');
   }
 
   getTarget() {

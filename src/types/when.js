@@ -1,4 +1,4 @@
-const { ValidateType } = require('./validate-type');
+const { ValidateType, toType } = require('./validate-type');
 
 const JSON_TYPES = ['object', 'array', 'string', 'number'];
 
@@ -25,7 +25,7 @@ class WhenType extends ValidateType {
       throw new Error(`WhenType jsonType must be one of: ${JSON_TYPES.join(', ')}`);
     }
     this.jsonType = options.jsonType;
-    this.type = options.type;
+    this.type = toType(options.type, 'When type');
   }
 
   validate(value, fieldName) {

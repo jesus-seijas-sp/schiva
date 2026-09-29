@@ -1,10 +1,10 @@
-const { ValidateType } = require('./validate-type');
+const { ValidateType, toTypes } = require('./validate-type');
 
 // Value must satisfy exactly one of the types. When none does, reports the errors of every type, like AnyOfType.
 class OneOfType extends ValidateType {
   constructor(options = {}) {
     super(options);
-    this.types = options.types || [];
+    this.types = toTypes(options.types, 'OneOf types') || [];
   }
 
   // Number of types the value satisfies, counting up to 2.

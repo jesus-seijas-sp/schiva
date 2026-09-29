@@ -1,0 +1,458 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Guide · schiva</title>
+    <meta
+      name="description"
+      content="How to use schiva: the schema DSL, JSON Schema draft-07, validation modes, errors, types of your own, security and performance."
+    />
+    <link rel="canonical" href="https://schiva.js.org/guide.html" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230d7c66'/%3E%3Ctext x='16' y='22.5' font-family='monospace' font-size='18' font-weight='700' fill='white' text-anchor='middle'%3Es%3C/text%3E%3C/svg%3E"
+    />
+    <link rel="stylesheet" href="style.css" />
+    <script src="main.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+  </head>
+  <body>
+    <header class="header">
+      <div class="header-inner">
+        <a class="logo" href="./"><span class="logo-mark">s</span>schiva</a>
+        <nav class="nav">
+          <a href="guide.html" aria-current="page">Guide</a>
+          <a class="hide-small" href="#performance">Performance</a>
+          <a href="https://github.com/jesus-seijas-sp/schiva">GitHub</a>
+          <a class="hide-small" href="https://www.npmjs.com/package/schiva">npm</a>
+          <button class="theme-toggle" type="button" aria-label="Switch between light and dark theme">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />
+            </svg>
+          </button>
+        </nav>
+      </div>
+    </header>
+
+    <div class="docs">
+      <button class="menu-toggle" type="button" aria-expanded="false">☰ Contents</button>
+      <aside class="sidebar">
+        <h4>Guide</h4>
+        <ul>
+          <li><a href="#getting-started">Getting started</a></li>
+          <li><a href="#modes">Modes</a></li>
+          <li><a href="#compile-once">Compile once</a></li>
+          <li><a href="#choosing">DSL or JSON Schema</a></li>
+        </ul>
+        <h4>Reference</h4>
+        <ul>
+          <li><a href="#schema-dsl">Schema DSL</a></li>
+          <li><a href="#json-schema">JSON Schema</a></li>
+          <li><a href="#errors">Errors</a></li>
+          <li><a href="#custom-types">Types of your own</a></li>
+          <li><a href="#api">API</a></li>
+        </ul>
+        <h4>More</h4>
+        <ul>
+          <li><a href="#security">Security</a></li>
+          <li><a href="#performance">Performance</a></li>
+          <li><a href="#faq">FAQ</a></li>
+        </ul>
+      </aside>
+
+      <article class="content">
+        <h1>Guide</h1>
+        <p class="intro">
+          schiva validates JavaScript values against a schema written with its DSL or with JSON Schema draft-07. It
+          compiles the schema into a function generated for it, which returns the errors it finds.
+        </p>
+
+        <h2 id="getting-started">Getting started</h2>
+        <pre><code class="language-sh">npm install schiva</code></pre>
+        <p>
+          schiva has no dependencies and runs on Node.js 18 and later, and in browsers through any bundler. It exports
+          the same names with <code>require</code> and with <code>import</code>.
+        </p>
+
+        <div class="tabs">
+          <div class="tab-list" role="tablist">
+            <button role="tab" id="tab-gs-dsl" aria-controls="panel-gs-dsl" aria-selected="true">Schema DSL</button>
+            <button role="tab" id="tab-gs-json" aria-controls="panel-gs-json" aria-selected="false">JSON Schema</button>
+          </div>
+          <div class="tab-panel" id="panel-gs-dsl" role="tabpanel" aria-labelledby="tab-gs-dsl">
+            <pre><code class="language-js">const { ClosedSchema, String, Integer, ArrayOf } = require('schiva');
+
+const person = new ClosedSchema({
+  id: String(),
+  age: Integer({ min: 18 }),
+  tags: ArrayOf({ type: String(), isMandatory: false }),
+});
+
+// Compile once, when the program starts:
+const validatePerson = person.compile();
+
+validatePerson({ id: 'x', age: 20 }); // []
+validatePerson({ id: 1, age: 10, extra: 1 });
+// ['id must be a string', 'age must be at least 18', 'Unexpected key: extra']</code></pre>
+          </div>
+          <div class="tab-panel" id="panel-gs-json" role="tabpanel" aria-labelledby="tab-gs-json" hidden>
+            <pre><code class="language-js">import { compileJsonSchema } from 'schiva';
+
+const validate = compileJsonSchema({
+  type: 'object',
+  required: ['id'],
+  properties: { id: { type: 'string', pattern: '^[A-Z]+$' } },
+});
+
+validate({ id: 'AB' }); // []
+validate({ id: 'ab' }); // ['id does not match the required pattern']</code></pre>
+          </div>
+        </div>
+
+        <h2 id="modes">Modes</h2>
+        <p>
+          <code>compile(options)</code> (on schemas and on every type) and
+          <code>compileJsonSchema(json, options)</code> return a function. The options choose what it returns:
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Option</th><th>The function returns</th><th>Use it when</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>(none)</td><td>every error message, <code>[]</code> when valid</td><td>messages are shown or logged</td></tr>
+              <tr><td><code>{ allErrors: false }</code></td><td>only the first error message, <code>[]</code> when valid</td><td>one message is enough; stops at the first failing check</td></tr>
+              <tr><td><code>{ errors: false }</code></td><td><code>true</code> or <code>false</code></td><td>only validity matters; builds no messages</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <pre><code class="language-js">const isPerson = person.compile({ errors: false });
+
+if (!isPerson(body)) {
+  // reject the request
+}</code></pre>
+        <p>
+          Schemas and types also have <code>validate(value)</code>, which checks without compiling (10 to 25 times
+          slower), and <code>isValid(value)</code>.
+        </p>
+
+        <h2 id="compile-once">Compile once</h2>
+        <p>
+          The compiled function is a snapshot of the schema: changes made to the schema or its types afterwards (such
+          as <code>.optional()</code>, <code>.nullable()</code> or setting their fields) are not seen. Compile after
+          building the schema, and compile again if it changes.
+        </p>
+        <p>
+          Compiling takes about 0.1 ms for a schema of moderate size, so compile when the program starts (or cache the
+          function), not for every value.
+        </p>
+        <pre><code class="language-js">// Compiled once, reused for every request.
+const validateOrder = orderSchema.compile();
+
+app.post('/orders', (req, res) => {
+  const errors = validateOrder(req.body);
+  if (errors.length) return res.status(400).json({ errors });
+  // ...
+});</code></pre>
+        <div class="callout">
+          <p>
+            The generated code uses <code>new Function</code>, so it does not run where code generation is forbidden,
+            for example with a strict Content Security Policy. See <a href="#security">Security</a>.
+          </p>
+        </div>
+
+        <h2 id="choosing">DSL or JSON Schema</h2>
+        <p>Both compile to the same types and the same generated code, so the speed is the same.</p>
+        <ul>
+          <li>
+            Use <strong>JSON Schema</strong> when the schema is shared with other languages or tools: OpenAPI, form
+            generators, other services.
+          </li>
+          <li>
+            Use the <strong>DSL</strong> when the schema lives in your JavaScript code. It is shorter, and
+            <code>RegExp</code> patterns and <a href="#custom-types">types of your own</a> fit in directly.
+          </li>
+        </ul>
+
+        <h2 id="schema-dsl">Schema DSL</h2>
+        <p>
+          A <code>Schema</code> takes an object whose keys are the expected properties. Plain objects inside it become
+          nested schemas.
+        </p>
+        <pre><code class="language-js">const { Schema, String, Float, Enum, ArrayOf, Integer } = require('schiva');
+
+const order = new Schema(
+  {
+    id: String({ pattern: /^ORD-\d{8}$/ }),
+    status: Enum({ options: ['draft', 'placed'] }),
+    customer: { name: String({ min: 1 }), email: String({ isMandatory: false }) },
+    lines: ArrayOf({ type: { sku: String(), qty: Integer({ min: 1 }) }, min: 1 }),
+    total: Float({ min: 0 }),
+  },
+  { isOpen: false }
+);</code></pre>
+        <div class="callout">
+          <p>
+            Wherever a type is expected (<code>ArrayOf</code>, <code>AnyOf</code>, <code>Not</code>,
+            <code>additionalType</code>...), a plain object stands for <code>new Schema(object)</code>, as
+            <code>lines</code> shows above. That schema is open even inside a <code>ClosedSchema</code>; write
+            <code>new ClosedSchema({ ... })</code> to reject unknown keys there too. A value that is neither a type nor
+            an object of types throws when the type is built.
+          </p>
+        </div>
+
+        <h3 id="types">Types</h3>
+        <p>
+          Every type takes <code>isMandatory</code> (default <code>true</code>: <code>undefined</code> is an error)
+          and <code>isNullable</code> (default <code>false</code>: <code>null</code> is an error), and has
+          <code>.optional()</code>, <code>.required()</code>, <code>.nullable()</code> and <code>.notNull()</code>.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Type</th><th>Options</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>String</code></td><td><code>min</code>, <code>max</code> (length), <code>pattern</code> (RegExp), <code>allowEmpty</code>, <code>countCodePoints</code></td></tr>
+              <tr><td><code>Integer</code>, <code>Float</code></td><td><code>min</code>, <code>max</code>, <code>exclusiveMin</code>, <code>exclusiveMax</code>, <code>multipleOf</code></td></tr>
+              <tr><td><code>Boolean</code>, <code>Any</code>, <code>Never</code></td><td></td></tr>
+              <tr><td><code>Enum</code></td><td><code>options</code> (strings)</td></tr>
+              <tr><td><code>Values</code>, <code>Const(value)</code></td><td><code>values</code>: allowed values, compared deeply</td></tr>
+              <tr><td><code>ArrayOf</code></td><td><code>type</code> (one type, or an array of types for a tuple), <code>min</code>, <code>max</code>, <code>unique</code>, <code>contains</code>, <code>additionalType</code></td></tr>
+              <tr><td><code>AnyOf</code>, <code>AllOf</code>, <code>OneOf</code></td><td><code>types</code></td></tr>
+              <tr><td><code>Not</code></td><td><code>type</code></td></tr>
+              <tr><td><code>Conditional</code></td><td><code>ifType</code>, <code>thenType</code>, <code>elseType</code></td></tr>
+              <tr><td><code>When</code></td><td><code>jsonType</code> (<code>object</code>, <code>array</code>, <code>string</code>, <code>number</code>), <code>type</code>: checks only values of that JSON type</td></tr>
+              <tr><td><code>Ref</code></td><td><code>target</code>, for recursive schemas</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3 id="schema-options">Schema options</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Option</th><th>Meaning</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>isOpen</code></td><td>default <code>true</code>; <code>false</code> rejects unknown keys. <code>ClosedSchema</code> sets it to <code>false</code>.</td></tr>
+              <tr><td><code>additionalType</code></td><td>type of the keys that are not declared</td></tr>
+              <tr><td><code>patternTypes</code></td><td><code>[{ pattern, type }]</code>: type of the keys that match a pattern</td></tr>
+              <tr><td><code>propertyNameType</code></td><td>type that every key must match</td></tr>
+              <tr><td><code>minProperties</code>, <code>maxProperties</code></td><td>number of keys</td></tr>
+              <tr><td><code>dependencies</code></td><td><code>[{ key, required: [...] }]</code> or <code>[{ key, type }]</code></td></tr>
+              <tr><td><code>isMandatory</code>, <code>isNullable</code></td><td>as for every type</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Declared keys are read as own properties only, so <code>{}.toString</code> or a key added to
+          <code>Object.prototype</code> never counts as present.
+        </p>
+
+        <h3 id="helpers">Short helpers</h3>
+        <p>
+          <code>str</code>, <code>int</code>, <code>float</code>, <code>bool</code>, <code>arrOf</code>,
+          <code>obj</code>, <code>any</code>, <code>anyOf</code>, <code>allOf</code>, <code>oneOf</code>,
+          <code>not</code>, <code>enumt</code>, and optional versions prefixed with <code>o</code>
+          (<code>ostr</code>, <code>oint</code>...). <code>arrOf(String())</code> and
+          <code>arrOf({ sku: String() })</code> take the type of the elements; <code>arrOf({ type, min, ... })</code>
+          takes the options.
+        </p>
+
+        <h3 id="recursive">Recursive schemas</h3>
+        <p>Create the <code>Ref</code> first and point it at the schema once the schema exists:</p>
+        <pre><code class="language-js">const { Schema, Integer, ArrayOf, Ref } = require('schiva');
+
+const child = Ref();
+const node = new Schema({ value: Integer(), children: ArrayOf({ type: child, isMandatory: false }) });
+child.target = node;
+
+node.compile()({ value: 1, children: [{ value: 2, children: [{ value: 'x' }] }] });
+// ['children[0].children[0].value must be a number']</code></pre>
+
+        <h2 id="json-schema">JSON Schema</h2>
+        <p>
+          <code>fromJsonSchema(json, options)</code> converts a JSON Schema (draft-07) into the same types, and
+          <code>compileJsonSchema(json, options)</code> compiles it. Every validation keyword of draft-07 is
+          supported, along with <code>definitions</code> and <code>$ref</code> (JSON pointers, <code>$id</code> base
+          URIs and anchors, recursive schemas). String lengths count Unicode code points, as the specification says.
+        </p>
+
+        <h3 id="strict">Unknown keywords throw</h3>
+        <p>A keyword schiva does not know throws when compiling, with the place where it was found:</p>
+        <pre><code class="language-js">compileJsonSchema({ type: 'string', maxLenght: 10 });
+// Error: Unsupported JSON Schema keyword "maxLenght" at #</code></pre>
+        <p>
+          Annotations (<code>title</code>, <code>description</code>, <code>default</code>, <code>examples</code>,
+          <code>$comment</code>, <code>readOnly</code>, <code>writeOnly</code>, <code>deprecated</code>) are accepted
+          and ignored.
+        </p>
+        <div class="callout">
+          <p>
+            <strong><code>format</code> is not checked.</strong> Draft-07 makes checking it optional, and schiva
+            accepts it as an annotation. Use <code>pattern</code>, or a <a href="#custom-types">type of your own</a>,
+            for values such as emails or dates.
+          </p>
+        </div>
+
+        <h3 id="documents">Several documents</h3>
+        <p>
+          References to other documents resolve against the documents given in <code>options.schemas</code>, as
+          <code>{ uri: schema }</code> or as an array of schemas with <code>$id</code>. Nothing is loaded from the
+          network, and a reference that cannot be resolved throws when compiling:
+        </p>
+        <pre><code class="language-js">const validateOrder = compileJsonSchema(orderSchema, {
+  schemas: { 'https://example.com/schemas/address.json': addressSchema },
+});</code></pre>
+        <p>
+          To validate schemas against the draft-07 meta-schema, register it in <code>schemas</code> (ajv ships a copy
+          as <code>ajv/dist/refs/json-schema-draft-07.json</code>).
+        </p>
+
+        <h2 id="errors">Errors</h2>
+        <p>Errors are plain strings that start with the path of the field, so they can be logged or returned as they are:</p>
+        <pre><code class="language-js">[
+  'customer.name is mandatory',
+  'lines[1].sku must be a string',
+  'lines[1].price must be at least 0',
+  'Unexpected key: extra',
+]</code></pre>
+        <p>
+          A value checked on its own (not inside a schema) is called <code>Value</code>:
+          <code>Integer().compile()('x')</code> returns <code>['Value must be a number']</code>.
+        </p>
+
+        <h2 id="custom-types">Types of your own</h2>
+        <p>
+          Classes that extend <code>ValidateType</code> (or a built-in type) with their own <code>validate()</code> or
+          <code>isValid()</code> keep working when compiled: the generated code calls them for their part of the
+          schema. <code>validate()</code> returns <code>undefined</code> when the value is valid and an error message
+          otherwise.
+        </p>
+        <pre><code class="language-js">const { Schema, ValidateType } = require('schiva');
+
+class Even extends ValidateType {
+  validate(value, fieldName = 'Value') {
+    const presence = super.validate(value, fieldName); // isMandatory and isNullable
+    if (presence !== undefined || value === undefined || value === null) return presence;
+    return value % 2 === 0 ? undefined : `${fieldName} must be even`;
+  }
+}
+
+new Schema({ n: new Even() }).compile()({ n: 3 }); // ['n must be even']</code></pre>
+
+        <h2 id="api">API</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Function or method</th><th>Returns</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>new Schema(shape, options)</code>, <code>new ClosedSchema(shape, options)</code></td><td>a schema for objects</td></tr>
+              <tr><td><code>type.compile(options)</code></td><td>a validation function; see <a href="#modes">Modes</a></td></tr>
+              <tr><td><code>type.validate(value)</code></td><td>the errors, without compiling</td></tr>
+              <tr><td><code>type.isValid(value)</code></td><td><code>true</code> or <code>false</code>, without compiling</td></tr>
+              <tr><td><code>compileJsonSchema(json, options)</code></td><td>a validation function for a JSON Schema; takes the options of <code>compile</code> and <code>schemas</code></td></tr>
+              <tr><td><code>fromJsonSchema(json, options)</code></td><td>the schiva type of a JSON Schema</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h2 id="security">Security</h2>
+        <ul>
+          <li>
+            <strong>Schemas are code.</strong> Compiling turns a schema into JavaScript, so treat schemas like the code
+            of your program: compile schemas you wrote or trust, not schemas sent by users. A large or deeply nested
+            schema is slow to compile and to validate.
+          </li>
+          <li>
+            <strong>Regular expressions.</strong> <code>pattern</code>, <code>patternProperties</code> and
+            <code>String({ pattern })</code> run the regular expression you give them on the data. A badly written one
+            can take exponential time on some inputs
+            (<a href="https://owasp.org/www-community/attacks/Regular_expression_Denial_of_Service_-_ReDoS">ReDoS</a>).
+            Keep them simple, and limit the length of strings (<code>maxLength</code>, <code>String({ max })</code>)
+            before matching long input.
+          </li>
+          <li>
+            <strong>Every error or the first one.</strong> Collecting every error keeps checking after the first
+            failure, so an invalid value costs more. For untrusted input where one message is enough, use
+            <code>{ allErrors: false }</code> or <code>{ errors: false }</code>.
+          </li>
+          <li>
+            <strong>Large inputs.</strong> <code>uniqueItems</code>/<code>unique</code> compares items with each
+            other, so limit the size of arrays (<code>maxItems</code>, <code>ArrayOf({ max })</code>) that come from
+            outside.
+          </li>
+          <li>
+            <strong>Content Security Policy.</strong> The generated code is created with <code>new Function</code>,
+            which needs <code>'unsafe-eval'</code> in the <code>script-src</code> of a Content Security Policy. Where
+            that is not allowed, use <code>validate()</code> and <code>isValid()</code>, which do not generate code.
+          </li>
+          <li><strong>Circular data.</strong> Values that contain themselves (<code>a.self = a</code>) are not supported.</li>
+        </ul>
+        <p>
+          Report security problems privately through
+          <a href="https://github.com/jesus-seijas-sp/schiva/security/advisories/new">GitHub security advisories</a>,
+          not in public issues.
+        </p>
+
+        <h2 id="performance">Performance</h2>
+        <p>
+          Compared with ajv and the other validators of
+          <a href="https://github.com/ebdrup/json-schema-benchmark">json-schema-benchmark</a>, each measurement in its
+          own process:
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th></th><th>schiva</th><th>ajv</th><th>@exodus/schemasafe</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Test suite, tests passed</td><td><strong>929</strong> of 929</td><td>921 (8 wrong)</td><td>905</td></tr>
+              <tr><td>Test suite, first error (runs/sec)</td><td><strong>118k</strong></td><td>62k</td><td>99k</td></tr>
+              <tr><td>Test suite, all errors (runs/sec)</td><td><strong>88k</strong></td><td>54k</td><td>65k</td></tr>
+              <tr><td>Order with 20 lines, valid, first error (validations/sec)</td><td><strong>2.26M</strong></td><td>0.76M</td><td>0.54M</td></tr>
+              <tr><td>Order with 20 lines, invalid, all errors (validations/sec)</td><td><strong>1.86M</strong></td><td>0.43M</td><td>0.32M</td></tr>
+              <tr><td>Compiling a schema (per sec)</td><td><strong>10k</strong></td><td>0.2k</td><td>0.8k</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <pre><code class="language-sh">pnpm run bench         # every validator in its own process (about 8 minutes)
+pnpm run bench:quick   # every validator in one process (about a minute)</code></pre>
+        <p>
+          The method, and the payloads measured, are described in
+          <a href="https://github.com/jesus-seijas-sp/schiva/tree/main/bench">bench/</a>.
+        </p>
+
+        <h2 id="faq">FAQ</h2>
+        <h3 id="faq-strings">Why are errors strings and not objects?</h3>
+        <p>
+          Most errors end up in a log or an HTTP response. Strings with the path in front are ready for that, and
+          building them is cheap. If you only need to know whether a value is valid, use
+          <code>{ errors: false }</code>.
+        </p>
+        <h3 id="faq-drafts">Does it support draft 2019-09 or 2020-12?</h3>
+        <p>
+          Not yet: schiva implements draft-07. Keywords from later drafts, such as
+          <code>unevaluatedProperties</code> or <code>$defs</code>, throw when compiling.
+        </p>
+        <h3 id="faq-format">Does it check <code>format</code>?</h3>
+        <p>No, see <a href="#strict">Unknown keywords throw</a>.</p>
+        <h3 id="faq-ts">Does it include TypeScript types?</h3>
+        <p>Not yet.</p>
+      </article>
+    </div>
+
+    <footer class="footer">
+      <div class="container">
+        <span>schiva is MIT licensed. © Jesús Seijas</span>
+        <span>
+          <a href="./">Home</a> · <a href="https://github.com/jesus-seijas-sp/schiva">GitHub</a> ·
+          <a href="https://www.npmjs.com/package/schiva">npm</a> · <a href="https://js.org">js.org</a>
+        </span>
+      </div>
+    </footer>
+  </body>
+</html>

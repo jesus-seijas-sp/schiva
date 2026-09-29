@@ -14,7 +14,7 @@ const compat = new FlatCompat({
 
 module.exports = [
   {
-    ignores: ['**/node_modules/**/*', '**/coverage/**/*'],
+    ignores: ['**/node_modules/**/*', '**/coverage/**/*', 'docs/**/*'],
   },
   ...compat.extends('plugin:jest/recommended', 'prettier'),
   {

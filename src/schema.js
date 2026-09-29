@@ -1,4 +1,4 @@
-const { ObjType, ValidateType } = require('./types');
+const { ObjType, ValidateType, toType } = require('./types');
 
 // Declared keys are read as own properties only: {}.toString or {}.constructor must not count as present.
 // A value read from a plain object is its own unless Object.prototype has the key, which avoids the slower
@@ -22,16 +22,21 @@ class Schema {
     this.isMandatory = options.isMandatory === undefined ? true : options.isMandatory;
     this.isNullable = options.isNullable === undefined ? false : options.isNullable;
     // Type that keys not declared in the schema must satisfy (only used when the schema is open).
-    this.additionalType = options.additionalType;
+    this.additionalType = toType(options.additionalType, 'Schema additionalType');
     // [{ pattern, type }]: keys matching a pattern must satisfy its type, and are not checked by additionalType.
-    this.patternTypes = options.patternTypes || [];
+    this.patternTypes = (options.patternTypes || []).map((item, i) => ({
+      ...item,
+      type: toType(item.type, `Schema patternTypes[${i}].type`),
+    }));
     this.minProperties = options.minProperties;
     this.maxProperties = options.maxProperties;
     // [{ key, required: [properties] } or { key, type }]: when key is present, the properties must be present too,
     // or the whole object must satisfy type.
-    this.dependencies = options.dependencies || [];
+    this.dependencies = (options.dependencies || []).map((item, i) =>
+      item.type === undefined ? item : { ...item, type: toType(item.type, `Schema dependencies[${i}].type`) }
+    );
     // Type every key must satisfy, reported as "Key <name>".
-    this.propertyNameType = options.propertyNameType;
+    this.propertyNameType = toType(options.propertyNameType, 'Schema propertyNameType');
     this.visitObjs();
     this.keys = Object.keys(this.schema);
     this.keySet = new Set(this.keys);

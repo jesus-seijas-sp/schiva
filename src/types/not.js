@@ -1,10 +1,10 @@
-const { ValidateType } = require('./validate-type');
+const { ValidateType, toType } = require('./validate-type');
 
 // Value must not satisfy `type`.
 class NotType extends ValidateType {
   constructor(options = {}) {
     super(options);
-    this.type = options.type;
+    this.type = toType(options.type, 'Not type');
   }
 
   validate(value, fieldName = 'Value') {

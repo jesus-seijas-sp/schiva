@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>schiva: fast schema validation for JavaScript</title>
+    <meta
+      name="description"
+      content="Fast schema validation for JavaScript. A schema DSL and JSON Schema draft-07, compiled to generated code. Passes the whole draft-07 test suite, zero dependencies."
+    />
+    <meta property="og:title" content="schiva: fast schema validation for JavaScript" />
+    <meta
+      property="og:description"
+      content="A schema DSL and JSON Schema draft-07, compiled to generated code. Faster than ajv, 929 of 929 draft-07 tests."
+    />
+    <meta property="og:url" content="https://schiva.js.org/" />
+    <link rel="canonical" href="https://schiva.js.org/" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230d7c66'/%3E%3Ctext x='16' y='22.5' font-family='monospace' font-size='18' font-weight='700' fill='white' text-anchor='middle'%3Es%3C/text%3E%3C/svg%3E"
+    />
+    <link rel="stylesheet" href="style.css" />
+    <script src="main.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+  </head>
+  <body>
+    <header class="header">
+      <div class="header-inner">
+        <a class="logo" href="./"><span class="logo-mark">s</span>schiva</a>
+        <nav class="nav">
+          <a href="guide.html">Guide</a>
+          <a class="hide-small" href="guide.html#performance">Performance</a>
+          <a href="https://github.com/jesus-seijas-sp/schiva">GitHub</a>
+          <a class="hide-small" href="https://www.npmjs.com/package/schiva">npm</a>
+          <button class="theme-toggle" type="button" aria-label="Switch between light and dark theme">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />
+            </svg>
+          </button>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <div class="container">
+        <section class="hero">
+          <div>
+            <h1>Schema validation, <em>compiled</em>.</h1>
+            <p>
+              Describe your data with a small DSL or with JSON Schema draft-07. schiva turns the schema into a
+              JavaScript function written for it, so every value is checked at full speed, with errors you can show
+              as they are.
+            </p>
+            <div class="actions">
+              <a class="button primary" href="guide.html#getting-started">Get started</a>
+              <button class="install" type="button" data-copy="npm install schiva" aria-label="Copy install command">
+                <span>$</span> <b class="copy-label">npm install schiva</b>
+              </button>
+            </div>
+          </div>
+
+          <div class="tabs">
+            <div class="tab-list" role="tablist">
+              <button role="tab" id="tab-dsl" aria-controls="panel-dsl" aria-selected="true">Schema DSL</button>
+              <button role="tab" id="tab-json" aria-controls="panel-json" aria-selected="false">JSON Schema</button>
+            </div>
+            <div class="tab-panel" id="panel-dsl" role="tabpanel" aria-labelledby="tab-dsl">
+              <pre><code class="language-js">import { ClosedSchema, String, Integer, ArrayOf } from 'schiva';
+
+const person = new ClosedSchema({
+  id: String(),
+  age: Integer({ min: 18 }),
+  tags: ArrayOf({ type: String(), isMandatory: false }),
+});
+
+const validate = person.compile();
+
+validate({ id: 1, age: 10, extra: 1 });
+// ['id must be a string',
+//  'age must be at least 18',
+//  'Unexpected key: extra']</code></pre>
+            </div>
+            <div class="tab-panel" id="panel-json" role="tabpanel" aria-labelledby="tab-json" hidden>
+              <pre><code class="language-js">import { compileJsonSchema } from 'schiva';
+
+const validate = compileJsonSchema({
+  type: 'object',
+  required: ['id', 'age'],
+  additionalProperties: false,
+  properties: {
+    id: { type: 'string' },
+    age: { type: 'integer', minimum: 18 },
+    tags: { type: 'array', items: { type: 'string' } },
+  },
+});
+
+validate({ id: 'x', age: 20 }); // []</code></pre>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <section class="section">
+        <div class="container">
+          <h2>Why schiva</h2>
+          <p class="lead">Small, strict and fast, with nothing to install besides itself.</p>
+          <div class="features">
+            <div class="feature">
+              <h3>Compiled to code</h3>
+              <p>
+                Each schema becomes a function generated for it. Compiling takes about 0.1 ms, about 50 times faster
+                than ajv.
+              </p>
+            </div>
+            <div class="feature">
+              <h3>Complete draft-07</h3>
+              <p>
+                Passes 929 of 929 tests of the draft-07 JSON-Schema-Test-Suite, including <code>$ref</code> across
+                documents.
+              </p>
+            </div>
+            <div class="feature">
+              <h3>Two schema languages</h3>
+              <p>A short DSL for schemas that live in your code, JSON Schema for schemas you share. Same engine.</p>
+            </div>
+            <div class="feature">
+              <h3>Readable errors</h3>
+              <p>Plain strings with the path of each field: <code>lines[12].price must be a number</code>.</p>
+            </div>
+            <div class="feature">
+              <h3>Strict by default</h3>
+              <p>A misspelled or unsupported keyword throws when compiling instead of being silently ignored.</p>
+            </div>
+            <div class="feature">
+              <h3>Zero dependencies</h3>
+              <p>CommonJS and ESM, Node.js 18 and later, and browsers through any bundler. MIT licensed.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="container">
+          <h2>Performance</h2>
+          <p class="lead">
+            Measured against ajv and @exodus/schemasafe with the validators of json-schema-benchmark, each in its own
+            process. Higher is better.
+          </p>
+          <div class="bench">
+            <div>
+              <h3>Draft-07 test suite, first error (runs/sec)</h3>
+              <div class="bar-row us"><span class="name">schiva</span><div class="bar" style="width: 100%"></div><span class="value">118k</span></div>
+              <div class="bar-row"><span class="name">schemasafe</span><div class="bar" style="width: 84%"></div><span class="value">99k</span></div>
+              <div class="bar-row"><span class="name">ajv</span><div class="bar" style="width: 53%"></div><span class="value">62k</span></div>
+            </div>
+            <div>
+              <h3>Draft-07 test suite, all errors (runs/sec)</h3>
+              <div class="bar-row us"><span class="name">schiva</span><div class="bar" style="width: 100%"></div><span class="value">88k</span></div>
+              <div class="bar-row"><span class="name">schemasafe</span><div class="bar" style="width: 74%"></div><span class="value">65k</span></div>
+              <div class="bar-row"><span class="name">ajv</span><div class="bar" style="width: 61%"></div><span class="value">54k</span></div>
+            </div>
+            <div>
+              <h3>Order with 20 lines, valid (validations/sec)</h3>
+              <div class="bar-row us"><span class="name">schiva</span><div class="bar" style="width: 100%"></div><span class="value">2.26M</span></div>
+              <div class="bar-row"><span class="name">ajv</span><div class="bar" style="width: 34%"></div><span class="value">0.76M</span></div>
+              <div class="bar-row"><span class="name">schemasafe</span><div class="bar" style="width: 24%"></div><span class="value">0.54M</span></div>
+            </div>
+            <div>
+              <h3>Order with 20 lines, invalid, all errors (validations/sec)</h3>
+              <div class="bar-row us"><span class="name">schiva</span><div class="bar" style="width: 100%"></div><span class="value">1.86M</span></div>
+              <div class="bar-row"><span class="name">ajv</span><div class="bar" style="width: 23%"></div><span class="value">0.43M</span></div>
+              <div class="bar-row"><span class="name">schemasafe</span><div class="bar" style="width: 17%"></div><span class="value">0.32M</span></div>
+            </div>
+            <div>
+              <h3>Compiling a schema (per sec)</h3>
+              <div class="bar-row us"><span class="name">schiva</span><div class="bar" style="width: 100%"></div><span class="value">10k</span></div>
+              <div class="bar-row"><span class="name">schemasafe</span><div class="bar" style="width: 8%"></div><span class="value">0.8k</span></div>
+              <div class="bar-row"><span class="name">ajv</span><div class="bar" style="width: 2%"></div><span class="value">0.2k</span></div>
+            </div>
+            <div>
+              <h3>Draft-07 tests passed (of 929)</h3>
+              <div class="bar-row us"><span class="name">schiva</span><div class="bar" style="width: 100%"></div><span class="value">929</span></div>
+              <div class="bar-row"><span class="name">ajv</span><div class="bar" style="width: 99%"></div><span class="value">921</span></div>
+              <div class="bar-row"><span class="name">schemasafe</span><div class="bar" style="width: 97%"></div><span class="value">905</span></div>
+            </div>
+          </div>
+          <p class="note">
+            Run them yourself with <code>pnpm run bench</code>; the method is described in
+            <a href="https://github.com/jesus-seijas-sp/schiva/tree/main/bench">bench/</a>.
+          </p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="container">
+        <span>schiva is MIT licensed. © Jesús Seijas</span>
+        <span>
+          <a href="guide.html">Guide</a> · <a href="https://github.com/jesus-seijas-sp/schiva">GitHub</a> ·
+          <a href="https://www.npmjs.com/package/schiva">npm</a> · <a href="https://js.org">js.org</a>
+        </span>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -2,6 +2,14 @@
   "name": "schiva",
   "version": "0.1.1",
   "description": "Fast schema validation for JavaScript: a schema DSL and JSON Schema (draft-07), compiled to generated code",
+  "homepage": "https://schiva.js.org",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jesus-seijas-sp/schiva.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jesus-seijas-sp/schiva/issues"
+  },
   "main": "./src/index.js",
   "type": "commonjs",
   "files": [
@@ -21,7 +29,11 @@
     "json-schema",
     "draft-07",
     "compiler",
-    "fast"
+    "fast",
+    "jsonschema",
+    "schema-validation",
+    "dsl",
+    "ajv-alternative"
   ],
   "author": "Jesús Seijas <jseijas@gmail.com>",
   "license": "MIT",
