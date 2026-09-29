@@ -1,6 +1,6 @@
 {
   "name": "schiva",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Fast schema validation for JavaScript: a schema DSL and JSON Schema (draft-07), compiled to generated code",
   "main": "./src/index.js",
   "type": "commonjs",
