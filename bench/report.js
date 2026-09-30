@@ -520,8 +520,8 @@ const page = `<!doctype html>
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230d7c66'/%3E%3Ctext x='16' y='22.5' font-family='monospace' font-size='18' font-weight='700' fill='white' text-anchor='middle'%3Es%3C/text%3E%3C/svg%3E"
     />
-    <link rel="stylesheet" href="style.css" />
-    <script src="main.js"></script>
+    <link rel="stylesheet" href="style.css?v=${versionOf('schiva')}" />
+    <script src="main.js?v=${versionOf('schiva')}"></script>
   </head>
   <body>
     <!-- Written by bench/report.js from the results of the benchmarks: do not edit, run it again. -->

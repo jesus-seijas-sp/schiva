@@ -1,7 +1,7 @@
 {
   "name": "schiva",
   "version": "0.5.0",
-  "description": "Fast schema validation for JavaScript: a schema DSL and JSON Schema (draft-07, 2019-09, 2020-12), compiled to generated code",
+  "description": "Fast schema validation for JavaScript: a schema DSL and JSON Schema (draft-04 to 2020-12), compiled to generated code",
   "homepage": "https://schiva.js.org",
   "repository": {
     "type": "git",
