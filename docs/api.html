@@ -13,8 +13,8 @@
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230d7c66'/%3E%3Ctext x='16' y='22.5' font-family='monospace' font-size='18' font-weight='700' fill='white' text-anchor='middle'%3Es%3C/text%3E%3C/svg%3E"
     />
-    <link rel="stylesheet" href="style.css?v=0.5.0" />
-    <script src="main.js?v=0.5.0"></script>
+    <link rel="stylesheet" href="style.css?v=0.6.0" />
+    <script src="main.js?v=0.6.0"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
   </head>
   <body>
@@ -53,6 +53,10 @@
         <h4>Standalone code</h4>
         <ul>
           <li><a href="#standalone">standaloneJsonSchema, standaloneCode, standaloneModule</a></li>
+        </ul>
+        <h4>Schemas from samples</h4>
+        <ul>
+          <li><a href="#infer">inferJsonSchema, inferSchemaCode</a></li>
         </ul>
         <h4>Schema DSL</h4>
         <ul>
@@ -218,6 +222,34 @@ fs.writeFileSync('validators.cjs', standaloneModule({ order, customer }, { error
           keywords that are macros or regular expressions. Functions of your own cannot be written out: types of your
           own, keywords with <code>validate</code> or <code>compile</code>, and formats given as functions throw a
           message naming them.
+        </p>
+
+        <h2 id="infer">inferJsonSchema(samples, options) and inferSchemaCode(samples, options)</h2>
+        <p>
+          The schema of a list of sample values (a single value goes in a list), merged from all of them: a key is
+          required when every object at that place has it, <code>null</code> makes a value nullable, integers and
+          numbers make a number, array elements are merged, and strings get a format every one of them matches (see
+          <a href="guide.html#infer">Schemas from samples</a>, or try <a href="infer.html">Schema from JSON</a>).
+          <code>inferJsonSchema()</code> returns a JSON Schema object; <code>inferSchemaCode()</code> returns the source
+          of a module that builds the same schema with the DSL.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Option</th><th>Value</th><th>Meaning</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>closed</code></td><td><code>false</code> (default) or <code>true</code></td><td>objects reject keys the samples do not have (<code>additionalProperties: false</code>, <code>ClosedSchema</code>)</td></tr>
+              <tr><td><code>formats</code></td><td><code>true</code> (default) or <code>false</code></td><td>detect <code>date-time</code>, <code>date</code>, <code>time</code>, <code>email</code>, <code>uuid</code>, <code>ipv4</code>, <code>ipv6</code> and <code>uri</code></td></tr>
+              <tr><td><code>draft</code></td><td><code>'2020-12'</code> (default), <code>'2019-09'</code>, <code>'draft-07'</code>, <code>'draft-06'</code>, <code>'draft-04'</code></td><td>the <code>$schema</code> written</td></tr>
+              <tr><td><code>name</code></td><td><code>'schema'</code> (default)</td><td><code>inferSchemaCode()</code> only: the name of the variable</td></tr>
+              <tr><td><code>module</code></td><td><code>'commonjs'</code> (default), <code>'esm'</code>, <code>'none'</code></td><td><code>inferSchemaCode()</code> only: the import line, with the names the code uses</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Values that are not JSON (functions, <code>Date</code> objects, <code>NaN</code>) throw, naming where they
+          are; keys whose value is <code>undefined</code> are taken as absent.
         </p>
 
         <h2 id="common">Common options and methods of the types</h2>

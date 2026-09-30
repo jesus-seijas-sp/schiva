@@ -11,6 +11,7 @@ faster than walking the schema for every value.
 
 **Documentation: [schiva.js.org](https://schiva.js.org)** &middot; [Guide](https://schiva.js.org/guide.html) &middot;
 [Playground](https://schiva.js.org/playground.html) &middot;
+[Schema from JSON](https://schiva.js.org/infer.html) &middot;
 [API reference](https://schiva.js.org/api.html) &middot; [Benchmarks](https://schiva.js.org/benchmarks.html) &middot;
 [Migrating from ajv](https://schiva.js.org/migrating-from-ajv.html)
 
@@ -26,6 +27,7 @@ faster than walking the schema for every value.
 - [JSON Schema](#json-schema)
 - [Errors](#errors)
 - [TypeScript](#typescript)
+- [Schemas from samples](#schemas-from-samples)
 - [Types of your own](#types-of-your-own)
 - [Security considerations](#security-considerations)
 - [Performance](#performance)
@@ -58,6 +60,8 @@ faster than walking the schema for every value.
 - **Formats**: optional checks of `format` (dates, email, host names with IDNA, URIs...), passing every format test
   of the JSON-Schema-Test-Suite. See [Formats](#formats).
 - **Standalone code**: validators written out as modules when building, for strict Content Security Policies.
+- **Schemas from samples**: `inferJsonSchema()` and `inferSchemaCode()` write the schema of your JSON samples, as JSON
+  Schema or DSL code; also [in the browser](https://schiva.js.org/infer.html).
 - **Extensible**: keywords of your own in JSON Schema (`validate`, `compile` or `macro`, and the ones of ajv-keywords
   with `ajvKeywords()`), and classes of your own with a `validate()` method inside compiled schemas.
 
@@ -632,6 +636,41 @@ schema needs the type of its `Ref`: `const child = Ref<TreeNode>()`.
 
 The values a JSON Schema accepts are `unknown` to TypeScript; give their type to get a type guard:
 `compileJsonSchema<User>(schema, { errors: false })`.
+
+## Schemas from samples
+
+`inferJsonSchema(samples, options)` writes the JSON Schema of a list of sample values, and
+`inferSchemaCode(samples, options)` the same schema in the DSL, as the source of a module. Try it in the browser with
+[Schema from JSON](https://schiva.js.org/infer.html).
+
+```js
+const { inferJsonSchema, inferSchemaCode } = require('schiva');
+
+const samples = [
+  { id: 1, name: 'Ann', email: 'ann@example.com', address: { city: 'Madrid' } },
+  { id: 2, name: 'Bob', email: 'bob@example.com', address: null, phone: '+34 600 000 000' },
+];
+
+console.log(inferSchemaCode(samples));
+// const { Integer, Schema, String } = require('schiva');
+//
+// const schema = new Schema({
+//   id: Integer(),
+//   name: String(),
+//   email: String({ format: 'email' }),
+//   address: new Schema({
+//     city: String(),
+//   }, { isNullable: true }),
+//   phone: String({ isMandatory: false }),
+// });
+```
+
+A key is required when every object at that place has it, `null` makes a value nullable, integers and numbers make a
+number, the elements of arrays are merged, and strings get a format (`date-time`, `date`, `time`, `email`, `uuid`,
+`ipv4`, `ipv6`, `uri`) when every one matches it. Options: `closed` (reject unknown keys), `formats` (`false` detects
+none), `draft` (the `$schema` written, `'2020-12'` by default), and for `inferSchemaCode()` `name` and `module`
+(`'commonjs'`, `'esm'` or `'none'`). The schema accepts every sample and is a starting point: add the limits the data
+needs.
 
 ## Types of your own
 

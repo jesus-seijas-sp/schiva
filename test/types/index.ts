@@ -25,6 +25,9 @@ import {
   compileJsonSchemaAsync,
   loadJsonSchemas,
   ajvKeywords,
+  builtInFormats,
+  inferJsonSchema,
+  inferSchemaCode,
   KeywordDefinition,
   compileType,
   enumt,
@@ -35,6 +38,7 @@ import {
   str,
   toErrors,
   ErrorObject,
+  JsonSchemaObject,
   standaloneCode,
   standaloneJsonSchema,
   standaloneModule,
@@ -280,5 +284,15 @@ export const macroType: KeywordDefinition = { keyword: 'x', type: 'boolean', mac
 export const badAjvKeyword = ajvKeywords(['transform']);
 // @ts-expect-error options of an Enum are strings
 export const badEnum = Enum({ options: [1, 2] });
+
+// Inferred schemas and built-in formats.
+const inferred: JsonSchemaObject = inferJsonSchema([{ a: 1 }], { closed: true, formats: false, draft: 'draft-07' });
+const inferredCode: string = inferSchemaCode([{ a: 1 }, { a: 'x' }], { name: 'order', module: 'esm' });
+const allFormats: { email: true } = builtInFormats();
+export { inferred, inferredCode, allFormats };
+// @ts-expect-error samples are a list
+export const badSamples = inferJsonSchema({ a: 1 });
+// @ts-expect-error there is no such module
+export const badModule = inferSchemaCode([1], { module: 'amd' });
 
 export { messages, jsonMessages, allMessages };

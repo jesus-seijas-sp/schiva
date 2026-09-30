@@ -1528,3 +1528,158 @@ details.raw summary {
     width: 100%;
   }
 }
+
+/* Playground and Schema from JSON: switch between the two tools */
+
+.pg-switch {
+  display: inline-flex;
+  gap: 0.25rem;
+  margin-bottom: 1.25rem;
+  padding: 0.25rem;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+.pg-switch a {
+  padding: 0.3rem 0.95rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-soft);
+  border-radius: 999px;
+}
+
+.pg-switch a:hover {
+  text-decoration: none;
+  color: var(--text);
+}
+
+.pg-switch a[aria-current='page'] {
+  color: var(--accent-text);
+  background: var(--accent);
+}
+
+/* Schema from JSON */
+
+.inf-samples {
+  display: flex;
+  flex-direction: column;
+}
+
+.inf-sample + .inf-sample {
+  border-top: 1px solid var(--border);
+}
+
+.inf-sample-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.35rem 0.9rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-soft);
+  background: var(--bg-soft);
+}
+
+.inf-remove {
+  padding: 0;
+  font: inherit;
+  color: var(--text-soft);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.inf-remove:hover {
+  color: #d64545;
+}
+
+.pg .inf-sample textarea {
+  display: block;
+  min-height: 15rem;
+}
+
+.inf-add {
+  padding: 0.75rem 0.9rem;
+  border-top: 1px solid var(--border);
+}
+
+.inf-add .button,
+.inf-actions .button {
+  padding: 0.45rem 0.95rem;
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  background: transparent;
+  color: var(--accent);
+}
+
+.inf-actions .button.primary {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+.inf-actions .button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.inf-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.5rem;
+  align-items: center;
+  padding: 0.8rem 0.9rem;
+  background: var(--bg);
+}
+
+.inf-check {
+  display: inline-flex;
+  gap: 0.4rem;
+  align-items: center;
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.inf-check input {
+  accent-color: var(--accent);
+}
+
+.inf-tabs .tab-list {
+  margin: 0;
+}
+
+.inf-tabs .tab-list button {
+  padding: 0.2rem 0.75rem;
+  font: inherit;
+  font-size: 0.82rem;
+  color: var(--text-soft);
+  background: none;
+  cursor: pointer;
+}
+
+.inf-output {
+  flex: 1;
+  margin: 0;
+  max-height: 38rem;
+  border: 0;
+  border-radius: 0;
+  overflow: auto;
+}
+
+.inf-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.75rem 0.9rem;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.pg-output > .pg-result.is-problem {
+  flex: none;
+}

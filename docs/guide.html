@@ -13,8 +13,8 @@
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230d7c66'/%3E%3Ctext x='16' y='22.5' font-family='monospace' font-size='18' font-weight='700' fill='white' text-anchor='middle'%3Es%3C/text%3E%3C/svg%3E"
     />
-    <link rel="stylesheet" href="style.css?v=0.5.0" />
-    <script src="main.js?v=0.5.0"></script>
+    <link rel="stylesheet" href="style.css?v=0.6.0" />
+    <script src="main.js?v=0.6.0"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
   </head>
   <body>
@@ -54,6 +54,7 @@
           <li><a href="#json-schema">JSON Schema</a></li>
           <li><a href="#errors">Errors</a></li>
           <li><a href="#typescript">TypeScript</a></li>
+          <li><a href="#infer">Schemas from samples</a></li>
           <li><a href="#custom-types">Types of your own</a></li>
           <li><a href="#api">API</a></li>
         </ul>
@@ -789,6 +790,62 @@ if (isPerson(body)) {
         <p>
           The values a JSON Schema accepts are <code>unknown</code> to TypeScript; give their type to get a type guard:
           <code>compileJsonSchema&lt;User&gt;(schema, { errors: false })</code>.
+        </p>
+
+        <h2 id="infer">Schemas from samples</h2>
+        <p>
+          <code>inferJsonSchema(samples, options)</code> writes the JSON Schema of a list of sample values, and
+          <code>inferSchemaCode(samples, options)</code> the same schema in the DSL, as the source of a module. Try it
+          in the browser with <a href="infer.html">Schema from JSON</a>. The samples are merged:
+        </p>
+        <ul>
+          <li>A key is required when every object at that place has it, and optional otherwise.</li>
+          <li>
+            A value seen as <code>null</code> is nullable; integers and numbers make a number; different types make a
+            list of types (<code>AnyOf</code> in the DSL).
+          </li>
+          <li>The elements of every array at a place are merged into one schema for them.</li>
+          <li>
+            A string gets a format (<code>date-time</code>, <code>date</code>, <code>time</code>, <code>email</code>,
+            <code>uuid</code>, <code>ipv4</code>, <code>ipv6</code>, or <code>uri</code> with <code>scheme://</code>)
+            when every string there matches it.
+          </li>
+          <li>A value only ever seen as <code>null</code>, and the elements of arrays only seen empty, accept anything.</li>
+        </ul>
+        <pre><code class="language-js">const { inferJsonSchema, inferSchemaCode } = require('schiva');
+
+const samples = [
+  { id: 1, name: 'Ann', email: 'ann@example.com', address: { city: 'Madrid' } },
+  { id: 2, name: 'Bob', email: 'bob@example.com', address: null, phone: '+34 600 000 000' },
+];
+
+inferJsonSchema(samples);
+// { $schema: 'https://json-schema.org/draft/2020-12/schema', type: 'object',
+//   properties: { id: { type: 'integer' }, name: { type: 'string' }, email: { type: 'string', format: 'email' },
+//     address: { type: ['object', 'null'], properties: { city: { type: 'string' } }, required: ['city'] },
+//     phone: { type: 'string' } },
+//   required: ['id', 'name', 'email', 'address'] }
+
+console.log(inferSchemaCode(samples));
+// const { Integer, Schema, String } = require('schiva');
+//
+// const schema = new Schema({
+//   id: Integer(),
+//   name: String(),
+//   email: String({ format: 'email' }),
+//   address: new Schema({
+//     city: String(),
+//   }, { isNullable: true }),
+//   phone: String({ isMandatory: false }),
+// });</code></pre>
+        <p>
+          The options are <code>closed</code> (reject keys the samples do not have: <code>additionalProperties:
+          false</code>, <code>ClosedSchema</code>), <code>formats</code> (<code>false</code> detects none) and
+          <code>draft</code> (the <code>$schema</code> written, <code>'2020-12'</code> by default);
+          <code>inferSchemaCode()</code> also takes <code>name</code> (of the variable, <code>'schema'</code>) and
+          <code>module</code> (<code>'commonjs'</code>, <code>'esm'</code> or <code>'none'</code>). A single value goes in
+          a list: <code>inferJsonSchema([value])</code>. The schema accepts every sample and is a starting point: add
+          the limits the data needs, such as lengths, ranges, patterns and enums.
         </p>
 
         <h2 id="custom-types">Types of your own</h2>

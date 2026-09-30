@@ -10,6 +10,7 @@ const {
 const { Schema } = require('./schema');
 const { standaloneCode, standaloneModule, standaloneJsonSchema } = require('./standalone');
 const { ajvKeywords } = require('./ajv-keywords');
+const { inferJsonSchema, inferSchemaCode } = require('./infer');
 const {
   AllOfType,
   AllOf,
@@ -165,4 +166,6 @@ module.exports = {
   KeywordType,
   ajvKeywords,
   builtInFormats,
+  inferJsonSchema,
+  inferSchemaCode,
 };

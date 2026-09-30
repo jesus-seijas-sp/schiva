@@ -399,6 +399,33 @@ export function ajvKeywords(names?: AjvKeywordName | readonly AjvKeywordName[]):
  */
 export function builtInFormats(): { [name in FormatName]: true };
 
+/** Options of inferJsonSchema() and inferSchemaCode(). */
+export interface InferOptions {
+  /** true: objects reject keys the samples do not have (additionalProperties: false, ClosedSchema). Default false. */
+  closed?: boolean;
+  /** Detect formats (date-time, date, time, email, uuid, ipv4, ipv6, uri) that every string matches. Default true. */
+  formats?: boolean;
+  /** The draft of the "$schema" written. Default '2020-12'. */
+  draft?: JsonSchemaDraft;
+}
+
+/**
+ * A JSON Schema that accepts every sample: types, keys (required when every object has them), array elements and
+ * formats merged from all of them. A single value goes in a list: inferJsonSchema([value]).
+ */
+export function inferJsonSchema(samples: readonly unknown[], options?: InferOptions): JsonSchemaObject;
+
+/** The same schema as inferJsonSchema(), as the source of a JavaScript module that builds it with the DSL. */
+export function inferSchemaCode(
+  samples: readonly unknown[],
+  options?: InferOptions & {
+    /** The name of the variable. Default 'schema'. */
+    name?: string;
+    /** The import line: require (default), import, or none. */
+    module?: 'commonjs' | 'esm' | 'none';
+  }
+): string;
+
 export interface KeywordTypeOptions extends TypeOptions {
   keyword?: string;
   check: (value: any) => boolean;
