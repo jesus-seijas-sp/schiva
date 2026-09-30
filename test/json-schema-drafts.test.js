@@ -29,7 +29,7 @@ describe('JSON Schema drafts', () => {
     });
 
     it('Should read other "$schema" URIs as draft-07', () => {
-      const schema = { $schema: 'http://json-schema.org/draft-04/schema#', type: 'string' };
+      const schema = { $schema: 'https://example.com/my-dialect', type: 'string' };
       expect(check(schema, 1)).toEqual(['Value must be a string']);
     });
 
@@ -41,20 +41,25 @@ describe('JSON Schema drafts', () => {
         'Unsupported JSON Schema keyword "prefixItems"'
       );
       expect(() => compileJsonSchema({}, { draft: '2021' })).toThrow(
-        'Unsupported JSON Schema option "draft": "2021" is not one of draft-07, 2019-09, 2020-12'
+        'Unsupported JSON Schema option "draft": "2021" is not one of draft-04, draft-06, draft-07, 2019-09, 2020-12'
       );
     });
   });
 
   describe('Keywords of each draft', () => {
-    it('Should throw on the keywords that are not supported yet', () => {
+    it('Should throw on the keywords of later drafts in draft-07, and on references of the other draft', () => {
       expect(() => compileJsonSchema({ unevaluatedProperties: false })).toThrow(
         'Unsupported JSON Schema keyword "unevaluatedProperties" at #'
       );
-      expect(() => compileJsonSchema({ $schema: DRAFT_2020, items: { $dynamicRef: '#meta' } })).toThrow(
-        'JSON Schema keyword "$dynamicRef" at #.items is not supported yet'
+      expect(() => compileJsonSchema({ $schema: DRAFT_2019, items: { $dynamicRef: '#meta' } })).toThrow(
+        'Unsupported JSON Schema keyword "$dynamicRef" at #.items'
       );
-      expect(() => compileJsonSchema({ $schema: DRAFT_2019, $recursiveRef: '#' })).toThrow('is not supported yet');
+      expect(() => compileJsonSchema({ $schema: DRAFT_2020, $recursiveRef: '#' })).toThrow(
+        'Unsupported JSON Schema keyword "$recursiveRef" at #'
+      );
+      expect(() => compileJsonSchema({ $schema: DRAFT_2019, $recursiveRef: '#/$defs/a' })).toThrow(
+        '"$recursiveRef" must be "#"'
+      );
     });
 
     it('Should throw on keywords of other drafts', () => {

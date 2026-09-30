@@ -1,7 +1,9 @@
 const { ClosedSchema } = require('./closed-schema');
 const { compileErrors, compileFirstError, compileIsValid, compileType } = require('./compile');
-const { fromJsonSchema, compileJsonSchema } = require('./json-schema');
+const { fromJsonSchema, compileJsonSchema, compileJsonSchemaAsync, loadJsonSchemas } = require('./json-schema');
 const { Schema } = require('./schema');
+const { standaloneCode, standaloneModule, standaloneJsonSchema } = require('./standalone');
+const { ajvKeywords } = require('./ajv-keywords');
 const {
   AllOfType,
   AllOf,
@@ -70,6 +72,7 @@ const {
   WhenType,
   When,
   isJsonType,
+  KeywordType,
 } = require('./types');
 
 module.exports = {
@@ -80,6 +83,8 @@ module.exports = {
   compileType,
   fromJsonSchema,
   compileJsonSchema,
+  compileJsonSchemaAsync,
+  loadJsonSchemas,
   Schema,
   AllOfType,
   AllOf,
@@ -148,4 +153,9 @@ module.exports = {
   WhenType,
   When,
   isJsonType,
+  standaloneCode,
+  standaloneModule,
+  standaloneJsonSchema,
+  KeywordType,
+  ajvKeywords,
 };

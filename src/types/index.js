@@ -7,6 +7,7 @@ const conditional = require('./conditional');
 const enums = require('./enum');
 const float = require('./float');
 const integer = require('./integer');
+const keyword = require('./keyword');
 const never = require('./never');
 const not = require('./not');
 const obj = require('./obj');
@@ -27,6 +28,7 @@ module.exports = {
   ...enums,
   ...float,
   ...integer,
+  ...keyword,
   ...never,
   ...not,
   ...obj,

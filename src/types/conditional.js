@@ -14,8 +14,9 @@ class ConditionalType extends ValidateType {
     return this.ifType.isValid(value) ? this.thenType : this.elseType;
   }
 
-  validate(value, fieldName = 'Value') {
-    const result = super.validate(value, fieldName);
+  // The field name goes to the branch as received (see AllOfType.validate()).
+  validate(value, fieldName = undefined) {
+    const result = super.validate(value, fieldName || 'Value');
     if (result) {
       return result;
     }

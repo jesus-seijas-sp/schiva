@@ -29,14 +29,14 @@ function Enum(options) {
 }
 
 function enumt(options, isMandatory = true, isNullable = false) {
-  if (options !== undefined && options !== null && typeof options === 'object') {
+  if (options !== undefined && options !== null && !Array.isArray(options) && typeof options === 'object') {
     return new EnumType(options);
   }
   return new EnumType({ options, isMandatory, isNullable });
 }
 
 function oenumt(options, isMandatory = false, isNullable = false) {
-  if (options !== undefined && options !== null && typeof options === 'object') {
+  if (options !== undefined && options !== null && !Array.isArray(options) && typeof options === 'object') {
     return new EnumType({ isMandatory: false, ...options });
   }
   return new EnumType({ options, isMandatory, isNullable });

@@ -1,4 +1,6 @@
 const { ObjType, ValidateType, toType } = require('./types');
+const { assignDefaults } = require('./defaults');
+const { readCoerced } = require('./coerce');
 
 // Declared keys are read as own properties only: {}.toString or {}.constructor must not count as present.
 // A value read from a plain object is its own unless Object.prototype has the key, which avoids the slower
@@ -30,6 +32,11 @@ class Schema {
     }));
     this.minProperties = options.minProperties;
     this.maxProperties = options.maxProperties;
+    // [{ key, value, empty }]: defaults assigned to missing properties before checking them (option useDefaults).
+    this.defaults = options.defaults || [];
+    // What to do with additional properties (option removeAdditional): 'delete' them, delete the 'failing' ones, or
+    // nothing. They are deleted where they are checked, in the same order as the compiled code.
+    this.removeAdditional = options.removeAdditional;
     // [{ key, required: [properties] } or { key, type }]: when key is present, the properties must be present too,
     // or the whole object must satisfy type.
     this.dependencies = (options.dependencies || []).map((item, i) =>
@@ -44,7 +51,14 @@ class Schema {
 
   visitObjs() {
     // Nested schemas share the options, except the ones about the keys of this object.
-    const options = { ...this.options, patternTypes: undefined, dependencies: undefined, propertyNameType: undefined };
+    const options = {
+      ...this.options,
+      patternTypes: undefined,
+      dependencies: undefined,
+      propertyNameType: undefined,
+      defaults: undefined,
+      removeAdditional: undefined,
+    };
     const keys = Object.keys(this.schema);
     for (let i = 0; i < keys.length; i += 1) {
       const key = keys[i];
@@ -71,22 +85,24 @@ class Schema {
     if (typeof obj !== 'object' || Array.isArray(obj)) {
       return false;
     }
-    const { keys, keySet } = this;
+    if (this.defaults.length > 0) {
+      assignDefaults(obj, this.defaults);
+    }
+    const { keys } = this;
     for (let i = 0; i < keys.length; i += 1) {
       const key = keys[i];
-      if (!this.schema[key].isValid(ownValue(obj, key))) {
+      // With coerceTypes, a value is converted to the types of its schema as it is read (see coerce.js).
+      if (!this.schema[key].isValid(readCoerced(obj, key, this.schema[key], ownValue(obj, key)))) {
         return false;
       }
     }
     const objKeys = Object.keys(obj);
-    if (
-      (this.minProperties !== undefined && objKeys.length < this.minProperties) ||
-      (this.maxProperties !== undefined && objKeys.length > this.maxProperties)
-    ) {
+    const { patternTypes, propertyNameType, removeAdditional } = this;
+    // The keys removeAdditional deletes still count, as in ajv.
+    if (!this.hasPropertyCount(objKeys.length)) {
       return false;
     }
-    const { patternTypes, propertyNameType } = this;
-    if (!this.isOpen || this.additionalType || patternTypes.length > 0 || propertyNameType) {
+    if (!this.isOpen || this.additionalType || patternTypes.length > 0 || propertyNameType || removeAdditional) {
       for (let i = 0; i < objKeys.length; i += 1) {
         const key = objKeys[i];
         if (propertyNameType && !propertyNameType.isValid(key)) {
@@ -96,13 +112,18 @@ class Schema {
         for (let j = 0; j < patternTypes.length; j += 1) {
           if (patternTypes[j].pattern.test(key)) {
             matched = true;
-            if (!patternTypes[j].type.isValid(obj[key])) {
+            if (!patternTypes[j].type.isValid(readCoerced(obj, key, patternTypes[j].type, obj[key]))) {
               return false;
             }
           }
         }
-        if (!keySet.has(key) && !matched) {
-          if (!this.isOpen || (this.additionalType && !this.additionalType.isValid(obj[key]))) {
+        if (!this.isDeclared(key) && !matched) {
+          if (this.removes(obj, key)) {
+            delete obj[key];
+          } else if (
+            !this.isOpen ||
+            (this.additionalType && !this.additionalType.isValid(readCoerced(obj, key, this.additionalType, obj[key])))
+          ) {
             return false;
           }
         }
@@ -119,6 +140,31 @@ class Schema {
     return this.isValid(obj) ? [] : this.errors(obj, fieldName);
   }
 
+  // Whether a number of keys satisfies minProperties and maxProperties.
+  hasPropertyCount(count) {
+    return !(
+      (this.minProperties !== undefined && count < this.minProperties) ||
+      (this.maxProperties !== undefined && count > this.maxProperties)
+    );
+  }
+
+  // Whether a key is declared rather than additional. With removeAdditional, a key only "required" names is additional,
+  // as in ajv (`propertyKeys` are the keys "properties" names, see convertObject() in json-schema.js).
+  isDeclared(key) {
+    if (this.removeAdditional && this.propertyKeys) {
+      return this.propertyKeys.includes(key);
+    }
+    return this.keySet.has(key);
+  }
+
+  // Whether removeAdditional deletes the additional property `key` of `obj`.
+  removes(obj, key) {
+    return (
+      this.removeAdditional === 'delete' ||
+      (this.removeAdditional === 'failing' && !this.additionalType.isValid(obj[key]))
+    );
+  }
+
   // Compiles the schema into generated code, several times faster than validate(): see compileType() in compile.js
   // for the options. The compiled function does not see changes made to the schema afterwards.
   compile(options = {}) {
@@ -129,7 +175,7 @@ class Schema {
   // Error messages of a value already known to be invalid.
   errors(obj, fieldName = undefined) {
     const name = fieldName || 'Value';
-    const { keys: schemaKeys, keySet } = this;
+    const { keys: schemaKeys } = this;
     const errors = [];
     if (obj === undefined) {
       if (this.isMandatory) {
@@ -147,10 +193,13 @@ class Schema {
       errors.push(`${name} must be an object`);
       return errors;
     }
+    if (this.defaults.length > 0) {
+      assignDefaults(obj, this.defaults);
+    }
     for (let i = 0; i < schemaKeys.length; i += 1) {
       const key = schemaKeys[i];
       const type = this.schema[key];
-      const value = ownValue(obj, key);
+      const value = readCoerced(obj, key, type, ownValue(obj, key));
       if (!type.isValid(value)) {
         errors.push(type.errors(value, fieldName ? `${fieldName}.${key}` : key));
       }
@@ -166,23 +215,30 @@ class Schema {
       this.patternTypes.forEach(({ pattern, type }) => {
         if (pattern.test(key)) {
           matched = true;
-          if (!type.isValid(obj[key])) {
-            errors.push(type.errors(obj[key], keyName));
+          const value = readCoerced(obj, key, type, obj[key]);
+          if (!type.isValid(value)) {
+            errors.push(type.errors(value, keyName));
           }
         }
       });
-      if (!keySet.has(key) && !matched) {
-        if (!this.isOpen) {
+      if (!this.isDeclared(key) && !matched) {
+        if (this.removes(obj, key)) {
+          delete obj[key];
+        } else if (!this.isOpen) {
           errors.push(`Unexpected key: ${keyName}`);
-        } else if (this.additionalType && !this.additionalType.isValid(obj[key])) {
-          errors.push(this.additionalType.errors(obj[key], keyName));
+        } else if (this.additionalType) {
+          const value = readCoerced(obj, key, this.additionalType, obj[key]);
+          if (!this.additionalType.isValid(value)) {
+            errors.push(this.additionalType.errors(value, keyName));
+          }
         }
       }
     }
-    if (this.minProperties !== undefined && objKeys.length < this.minProperties) {
+    const count = objKeys.length;
+    if (this.minProperties !== undefined && count < this.minProperties) {
       errors.push(`${name} must have at least ${this.minProperties} properties`);
     }
-    if (this.maxProperties !== undefined && objKeys.length > this.maxProperties) {
+    if (this.maxProperties !== undefined && count > this.maxProperties) {
       errors.push(`${name} must have at most ${this.maxProperties} properties`);
     }
     this.dependencies.forEach(({ key, required, type }) => {

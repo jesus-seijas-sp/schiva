@@ -74,9 +74,7 @@ describe('Plain objects as types', () => {
 
   it('Should convert the types of AnyOf, AllOf and OneOf', () => {
     expect(AnyOf({ types: [{ a: String() }, { b: String() }] }).compile({ errors: false })({ b: 'x' })).toBe(true);
-    expect(AllOf({ types: [{ a: String() }, { b: String() }] }).compile()({ a: 'x' })).toEqual([
-      'Value.b is mandatory',
-    ]);
+    expect(AllOf({ types: [{ a: String() }, { b: String() }] }).compile()({ a: 'x' })).toEqual(['b is mandatory']);
     expect(OneOf({ types: [{ a: String() }, { b: String() }] }).compile({ errors: false })({ a: 'x' })).toBe(true);
   });
 
@@ -87,8 +85,8 @@ describe('Plain objects as types', () => {
       thenType: { name: String() },
       elseType: { id: Integer() },
     });
-    expect(conditional.compile()({ kind: 'user' })).toEqual(['Value.name is mandatory']);
-    expect(conditional.compile()({})).toEqual(['Value.id is mandatory']);
+    expect(conditional.compile()({ kind: 'user' })).toEqual(['name is mandatory']);
+    expect(conditional.compile()({})).toEqual(['id is mandatory']);
     expect(When({ jsonType: 'object', type: { a: String() } }).compile()({ a: 1 })).toEqual(['a must be a string']);
     expect(Ref({ target: { a: String() } }).compile()({ a: 1 })).toEqual(['a must be a string']);
   });

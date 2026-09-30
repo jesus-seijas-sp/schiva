@@ -6,12 +6,12 @@
     <title>schiva: fast schema validation for JavaScript</title>
     <meta
       name="description"
-      content="Fast schema validation for JavaScript. A schema DSL and JSON Schema (draft-07, 2019-09, 2020-12), compiled to generated code. Passes the whole draft-07 test suite, zero dependencies."
+      content="Fast schema validation for JavaScript. A schema DSL and JSON Schema (draft-04 to 2020-12), compiled to generated code. Passes the whole JSON Schema test suite of every draft, zero dependencies."
     />
     <meta property="og:title" content="schiva: fast schema validation for JavaScript" />
     <meta
       property="og:description"
-      content="A schema DSL and JSON Schema (draft-07, 2019-09, 2020-12), compiled to generated code. Faster than ajv in every benchmark we run, 929 of 929 draft-07 tests."
+      content="A schema DSL and JSON Schema (draft-04 to 2020-12), compiled to generated code. Faster than ajv in every benchmark we run, and passes every test of the JSON Schema test suite."
     />
     <meta property="og:url" content="https://schiva.js.org/" />
     <link rel="canonical" href="https://schiva.js.org/" />
@@ -30,6 +30,7 @@
         <nav class="nav">
           <a href="guide.html">Guide</a>
           <a class="hide-small" href="guide.html#performance">Performance</a>
+          <a class="hide-small" href="migrating-from-ajv.html">From ajv</a>
           <a href="https://github.com/jesus-seijas-sp/schiva">GitHub</a>
           <a class="hide-small" href="https://www.npmjs.com/package/schiva">npm</a>
           <button class="theme-toggle" type="button" aria-label="Switch between light and dark theme">
@@ -47,7 +48,7 @@
           <div>
             <h1>Schema validation, <em>compiled</em>.</h1>
             <p>
-              Describe your data with a small DSL or with JSON Schema (draft-07, 2019-09 or 2020-12). schiva turns the
+              Describe your data with a small DSL or with JSON Schema (draft-04 to 2020-12). schiva turns the
               schema into a JavaScript function written for it, so every value is checked at full speed, with errors
               you can show as they are.
             </p>
@@ -108,20 +109,23 @@ validate({ id: 'x', age: 20 }); // []</code></pre>
             <div class="feature">
               <h3>Compiled to code</h3>
               <p>
-                Each schema becomes a function generated for it. Compiling takes about 0.1 ms, about 50 times faster
-                than ajv.
+                Each schema becomes a function generated for it, in about 0.1 ms (40 times faster than ajv), or written
+                out as a module when building, for strict Content Security Policies.
               </p>
             </div>
             <div class="feature">
-              <h3>Draft-07, 2019-09, 2020-12</h3>
+              <h3>Complete JSON Schema</h3>
               <p>
-                Passes 929 of 929 tests of the draft-07 JSON-Schema-Test-Suite. From the later drafts, everything but
-                dynamic references, <code>unevaluatedProperties</code> included.
+                Passes every test of the JSON-Schema-Test-Suite from draft-04 to 2020-12: 4950 of 4950, dynamic
+                references and <code>unevaluatedProperties</code> included.
               </p>
             </div>
             <div class="feature">
               <h3>Two schema languages</h3>
-              <p>A short DSL for schemas that live in your code, JSON Schema for schemas you share. Same engine.</p>
+              <p>
+                A short DSL for schemas that live in your code, with their TypeScript types inferred. JSON Schema for
+                schemas you share. Same engine.
+              </p>
             </div>
             <div class="feature">
               <h3>Readable errors</h3>
@@ -149,35 +153,40 @@ validate({ id: 'x', age: 20 }); // []</code></pre>
           <div class="bench">
             <div>
               <h3>Draft-07 test suite, first error (runs/sec)</h3>
-              <div class="bar-row us"><span class="name">schiva</span><div class="bar" style="width: 100%"></div><span class="value">114k</span></div>
-              <div class="bar-row"><span class="name">schemasafe</span><div class="bar" style="width: 90%"></div><span class="value">103k</span></div>
-              <div class="bar-row"><span class="name">ajv</span><div class="bar" style="width: 54%"></div><span class="value">61k</span></div>
+              <div class="bar-row us"><span class="name">schiva</span><div class="bar" style="width: 100%"></div><span class="value">124k</span></div>
+              <div class="bar-row"><span class="name">schemasafe</span><div class="bar" style="width: 79%"></div><span class="value">98k</span></div>
+              <div class="bar-row"><span class="name">ajv</span><div class="bar" style="width: 48%"></div><span class="value">60k</span></div>
             </div>
             <div>
               <h3>Draft-07 test suite, all errors (runs/sec)</h3>
-              <div class="bar-row us"><span class="name">schiva</span><div class="bar" style="width: 100%"></div><span class="value">89k</span></div>
-              <div class="bar-row"><span class="name">schemasafe</span><div class="bar" style="width: 76%"></div><span class="value">68k</span></div>
-              <div class="bar-row"><span class="name">ajv</span><div class="bar" style="width: 61%"></div><span class="value">54k</span></div>
+              <div class="bar-row us"><span class="name">schiva</span><div class="bar" style="width: 100%"></div><span class="value">101k</span></div>
+              <div class="bar-row"><span class="name">schemasafe</span><div class="bar" style="width: 63%"></div><span class="value">64k</span></div>
+              <div class="bar-row"><span class="name">ajv</span><div class="bar" style="width: 50%"></div><span class="value">51k</span></div>
             </div>
             <div>
               <h3>Draft 2020-12 test suite, first error (runs/sec)</h3>
-              <div class="bar-row us"><span class="name">schiva</span><div class="bar" style="width: 100%"></div><span class="value">21.4k</span></div>
-              <div class="bar-row"><span class="name">schemasafe</span><div class="bar" style="width: 76%"></div><span class="value">16.2k</span></div>
-              <div class="bar-row"><span class="name">ajv *</span><div class="bar" style="width: 70%"></div><span class="value">5–15k</span></div>
+              <div class="bar-row us"><span class="name">schiva</span><div class="bar" style="width: 100%"></div><span class="value">25.7k</span></div>
+              <div class="bar-row"><span class="name">schemasafe</span><div class="bar" style="width: 67%"></div><span class="value">17.1k</span></div>
+              <div class="bar-row"><span class="name">ajv *</span><div class="bar" style="width: 58%"></div><span class="value">5–15k</span></div>
             </div>
             <div>
               <h3>Order, 2020-12 with unevaluatedProperties (validations/sec)</h3>
-              <div class="bar-row us"><span class="name">schiva</span><div class="bar" style="width: 100%"></div><span class="value">2.33M</span></div>
+              <div class="bar-row us"><span class="name">schiva</span><div class="bar" style="width: 100%"></div><span class="value">2.32M</span></div>
               <div class="bar-row"><span class="name">ajv</span><div class="bar" style="width: 28%"></div><span class="value">0.66M</span></div>
             </div>
             <div>
               <h3>Payment, oneOf and unevaluatedProperties (validations/sec)</h3>
-              <div class="bar-row us"><span class="name">schiva</span><div class="bar" style="width: 100%"></div><span class="value">16.1M</span></div>
-              <div class="bar-row"><span class="name">ajv</span><div class="bar" style="width: 57%"></div><span class="value">9.2M</span></div>
+              <div class="bar-row us"><span class="name">schiva</span><div class="bar" style="width: 100%"></div><span class="value">15.2M</span></div>
+              <div class="bar-row"><span class="name">ajv</span><div class="bar" style="width: 58%"></div><span class="value">8.8M</span></div>
+            </div>
+            <div>
+              <h3>Shapes, OpenAPI discriminator (validations/sec)</h3>
+              <div class="bar-row us"><span class="name">schiva</span><div class="bar" style="width: 100%"></div><span class="value">117M</span></div>
+              <div class="bar-row"><span class="name">ajv</span><div class="bar" style="width: 38%"></div><span class="value">44.8M</span></div>
             </div>
             <div>
               <h3>Compiling the order schema (per sec)</h3>
-              <div class="bar-row us"><span class="name">schiva</span><div class="bar" style="width: 100%"></div><span class="value">9.3k</span></div>
+              <div class="bar-row us"><span class="name">schiva</span><div class="bar" style="width: 100%"></div><span class="value">8.4k</span></div>
               <div class="bar-row"><span class="name">ajv</span><div class="bar" style="width: 2%"></div><span class="value">0.19k</span></div>
             </div>
           </div>

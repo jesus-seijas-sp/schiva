@@ -1,4 +1,4 @@
-const { Enum } = require('../src');
+const { Enum, enumt, oenumt } = require('../src');
 
 describe('Enum Type', () => {
   it('Should allow undefined if not mandatory', () => {
@@ -24,5 +24,12 @@ describe('Enum Type', () => {
   it('Should return undefined if value is in options', () => {
     const type = Enum({ options: ['a', 'b', 'c'] });
     expect(type.validate('a')).toBeUndefined();
+  });
+
+  it('Should take the list of options as the first argument of enumt and oenumt', () => {
+    expect(enumt(['a', 'b']).compile()('c')).toEqual(['Value must be one of: a, b']);
+    expect(enumt(['a', 'b']).compile()('a')).toEqual([]);
+    expect(oenumt(['a', 'b']).compile()(undefined)).toEqual([]);
+    expect(enumt({ options: ['a'] }).compile()('b')).toEqual(['Value must be one of: a']);
   });
 });

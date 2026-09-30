@@ -22,9 +22,30 @@ const {
   hasErrors,
   toErrors,
 } = require('./types');
+const { NO_TYPE, EVERY_TYPE } = require('./types/one-of');
+const { KeywordType } = require('./types/keyword');
+const { FORMAT_LIMITS } = require('./types/string');
+const { FORMAT_COMPARES } = require('./formats');
+
+// What the built-in comparisons of times put before a value to read its time (see compareTime() in formats.js).
+const TIME_PREFIXES = new Map([
+  [FORMAT_COMPARES.time, '2020-01-01T'],
+  [FORMAT_COMPARES['date-time'], ''],
+]);
+
+// How the comparison of a limit of a format fails, as code (see FORMAT_LIMITS in types/string.js).
+const FORMAT_LIMIT_FAILS = {
+  formatMinimum: '< 0',
+  formatMaximum: '> 0',
+  formatExclusiveMinimum: '<= 0',
+  formatExclusiveMaximum: '>= 0',
+};
+const { copyDefault } = require('./defaults');
+const { CoerceType, coerceSpecOf } = require('./coerce');
 const { codePointLength } = require('./types/code-point-length');
 const { hasDuplicates } = require('./types/has-duplicates');
 const { JSON_TYPES, UnevaluatedType, staticEvaluatedBy, staticEvaluatedByAll } = require('./unevaluated');
+const { errorObject, pathName } = require('./error-objects');
 
 // Compiles a type tree into a single generated function, like ajv does, so validating a value runs inline code
 // instead of one isValid()/errors() call per node. There are three modes:
@@ -51,7 +72,78 @@ const JSON_TYPE_CHECKS = {
   number: (v) => `typeof ${v} === 'number'`,
 };
 
+// Code testing the JSON types a keyword of your own can be limited to, for a value neither undefined nor null.
+const KEYWORD_TYPE_CHECKS = {
+  string: (v) => `typeof ${v} === 'string'`,
+  number: (v) => `typeof ${v} === 'number'`,
+  integer: (v) => `Number.isInteger(${v})`,
+  boolean: (v) => `typeof ${v} === 'boolean'`,
+  object: (v) => `(typeof ${v} === 'object' && !Array.isArray(${v}))`,
+  array: (v) => `Array.isArray(${v})`,
+  null: () => 'false',
+};
+
 const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
+
+// Code of the tests of coerce.js TYPE_TESTS, for the value in `x`.
+const COERCE_TYPE_TESTS = {
+  string: (x) => `typeof ${x} === 'string'`,
+  number: (x) => `(typeof ${x} === 'number' && Number.isFinite(${x}))`,
+  integer: (x) => `Number.isInteger(${x})`,
+  boolean: (x) => `typeof ${x} === 'boolean'`,
+  null: (x) => `${x} === null`,
+  object: (x) => `(${x} !== null && typeof ${x} === 'object' && !Array.isArray(${x}))`,
+  array: (x) => `Array.isArray(${x})`,
+};
+
+// Code of the conversions of coerce.js COERCIONS: [condition, value] pairs, for the value in `x` whose typeof is in `t`.
+const COERCE_CODE = {
+  string: (x, t) => [
+    [`${t} === 'number' || ${t} === 'boolean'`, `"" + ${x}`],
+    [`${x} === null`, '""'],
+  ],
+  number: (x, t) => [
+    [`${t} === 'boolean' || ${x} === null || (${t} === 'string' && ${x} !== "" && !Number.isNaN(+${x}))`, `+${x}`],
+  ],
+  integer: (x, t) => [
+    [
+      `${t} === 'boolean' || ${x} === null || (${t} === 'string' && ${x} !== "" && !Number.isNaN(+${x}) && +${x} % 1 === 0)`,
+      `+${x}`,
+    ],
+  ],
+  boolean: (x) => [
+    [`${x} === "false" || ${x} === 0 || ${x} === null`, 'false'],
+    [`${x} === "true" || ${x} === 1`, 'true'],
+  ],
+  null: (x) => [[`${x} === "" || ${x} === 0 || ${x} === false`, 'null']],
+  array: (x, t) => [[`${t} === 'string' || ${t} === 'number' || ${t} === 'boolean' || ${x} === null`, `[${x}]`]],
+};
+
+// Condition on the value in `x` (code) that its default ({ empty }, see assignDefaults()) replaces.
+const missingCode = (x, { empty }) =>
+  empty ? `${x} === undefined || ${x} === null || ${x} === ""` : `${x} === undefined`;
+
+// Code creating a new copy of a JSON value (arrays, plain objects and primitives), as a default is assigned; undefined
+// for other values. Keys are computed, so a "__proto__" key is a plain entry.
+function literalCode(value) {
+  if (value === null || typeof value === 'boolean' || typeof value === 'string') {
+    return JSON.stringify(value);
+  }
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? `(${JSON.stringify(value)})` : undefined;
+  }
+  if (Array.isArray(value) && Object.getPrototypeOf(value) === Array.prototype) {
+    const items = value.map(literalCode);
+    return items.every((item) => item !== undefined) ? `[${items.join(', ')}]` : undefined;
+  }
+  if (value !== null && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype) {
+    const entries = Object.keys(value).map((key) => [key, literalCode(value[key])]);
+    return entries.every(([, item]) => item !== undefined)
+      ? `{ ${entries.map(([key, item]) => `[${JSON.stringify(key)}]: ${item}`).join(', ')} }`
+      : undefined;
+  }
+  return undefined;
+}
 
 function ownerOf(obj, name) {
   let proto = obj;
@@ -156,16 +248,48 @@ function firstError(type, value, fieldName) {
   return toErrors(type.errors(value, fieldName))[0];
 }
 
+// The list of errors of generated code, undefined until the first error, with the errors of a type added.
 function pushErrors(out, type, value, fieldName) {
   const errors = toErrors(type.errors(value, fieldName));
-  for (let i = 0; i < errors.length; i += 1) {
-    out.push(errors[i]);
+  if (errors.length === 0) {
+    return out;
   }
+  return out === undefined ? errors : out.concat(errors);
+}
+
+// The same for errors as objects: a type of your own gives messages, which become errors with the keyword "custom"
+// at the path of its value (named as fieldName, undefined for the value itself).
+function customErrors(type, value, path) {
+  const params = { type: type.constructor.name };
+  return toErrors(type.errors(value, path.length > 0 ? pathName(path) : undefined)).map((message) =>
+    errorObject(path, 'custom', params, message)
+  );
+}
+
+function firstErrorObject(type, value, path) {
+  return customErrors(type, value, path)[0];
+}
+
+function pushErrorObjects(out, type, value, path) {
+  const errors = customErrors(type, value, path);
+  if (errors.length === 0) {
+    return out;
+  }
+  return out === undefined ? errors : out.concat(errors);
+}
+
+// A message for Generator.emit(): `text` gives the code of its text; `path` is the code of the path of the value it is
+// about, `keyword` the name of the check and `params` the code of an object with its details.
+function messageAt(path, text, keyword, params = '{}') {
+  return Object.assign(text, { path, keyword, params });
 }
 
 class Generator {
-  constructor(mode) {
+  // `structured`: errors as objects (see error-objects.js), with the paths of the values as arrays of keys and
+  // indexes instead of their names.
+  constructor(mode, structured = false) {
     this.mode = mode;
+    this.structured = structured;
     this.constants = [];
     this.nodes = [];
     this.functions = [];
@@ -185,6 +309,13 @@ class Generator {
     // OneOf nodes of an allOf whose matching alternatives a later "unevaluated*" of the same allOf reuses: the
     // variables they are recorded in, the value and function they belong to, and whether the oneOf wrote them.
     this.sharedMatches = new Map();
+    // Each oneOf with a discriminator to the same alternatives without it, which other values are checked against.
+    this.plainOneOfs = new Map();
+    // Values ("scope:variable") whose `plain` flag an enclosing allOf declares (see allOf()).
+    this.plainDeclared = new Set();
+    // In 'all' mode, whether the same error can be reported twice (several parts of an allOf, alternatives, or
+    // patterns checking a key): the result then keeps each error once.
+    this.mayRepeat = false;
   }
 
   // Runs `generate` as the body of another generated function.
@@ -221,11 +352,47 @@ class Generator {
   }
 
   // Statement for a failed check; `message` gives the message expression and is only called when needed.
+  // The error of a failed check: `message` gives the code of its text, and says the path of the value, the keyword
+  // and the code of its params (see messageAt()). Errors are texts, or objects when structured.
   emit(message) {
     if (this.mode === 'check') {
       return this.fail;
     }
-    return this.mode === 'first' ? `return ${message()};` : `out.push(${message()});`;
+    const text = message();
+    const error = this.structured
+      ? `${this.constant(errorObject)}(${message.path}, ${JSON.stringify(message.keyword)}, ${message.params}, ${text})`
+      : text;
+    // The list of errors is only made with the first one: valid values build none.
+    return this.mode === 'first' ? `return ${error};` : `out = P(out, ${error});`;
+  }
+
+  // Code of the path of the value itself: undefined (no name), or an empty array when structured.
+  rootPath() {
+    return this.structured ? '[]' : 'undefined';
+  }
+
+  // Code of the name of the value at `path`, as messages start with it; a Schema is "Value" at the root.
+  nameOf(path, isSchema) {
+    if (!this.structured) {
+      return isSchema ? schemaName(path) : valuePath(path);
+    }
+    const name = `${this.constant(pathName)}(${path})`;
+    return isSchema ? `(${name} || "Value")` : name;
+  }
+
+  // Code of the path of the key `key` (code) of the object at `path`.
+  keyOf(path, key) {
+    return this.structured ? `${path}.concat([${key}])` : keyPath(path, key);
+  }
+
+  // Code of the path of the element `index` (code) of the array at `path`, whose name is `name`.
+  indexOf(path, name, index) {
+    return this.structured ? `${path}.concat([${index}])` : `(${name} + "[" + ${index} + "]")`;
+  }
+
+  // Code of the path of a key checked by propertyNames, as a value: its name is "Key <name>".
+  propertyNameOf(path, key) {
+    return this.structured ? `${path}.concat([{ key: ${key} }])` : `("Key " + ${keyPath(path, key)})`;
   }
 
   // Checks [condition, message, pre] run in order until one fails; `rest` runs when none fails. The optional `pre`
@@ -299,7 +466,11 @@ class Generator {
       const name = this.name(`ref_${this.mode}`);
       functions.set(target, name);
       const params = { check: 'x', first: 'x, p', all: 'x, p, out' }[this.mode];
-      const end = { check: 'return true;', first: 'return undefined;', all: '' }[this.mode];
+      const end = {
+        check: 'return true;',
+        first: 'return undefined;',
+        all: 'return out;',
+      }[this.mode];
       // The target may be an outer node being generated: its function is generated on its own.
       const { visiting, fail } = this;
       this.visiting = new Set();
@@ -314,7 +485,9 @@ class Generator {
 
   // Like RefType: undefined is checked here, any other value by the target.
   ref(type, v, path) {
-    const onUndefined = type.isMandatory ? this.emit(() => `${valuePath(path)} + " is mandatory"`) : '';
+    const onUndefined = type.isMandatory
+      ? this.emit(messageAt(path, () => `${this.nameOf(path, false)} + " is mandatory"`, 'required'))
+      : '';
     const target = type.getTarget();
     const fn = this.refFunction(target);
     let call = `if (!${fn}(${v})) { ${this.fail} }\n`;
@@ -322,11 +495,11 @@ class Generator {
       const e = this.name('e');
       call = `const ${e} = ${fn}(${v}, ${path});\nif (${e} !== undefined) { return ${e}; }\n`;
     } else if (this.mode === 'all') {
-      call = `${fn}(${v}, ${path}, out);\n`;
+      call = `out = ${fn}(${v}, ${path}, out);\n`;
     }
     // Building messages, a field name that has to be built (a key or an index) is built only for an invalid value,
     // which the boolean function of the target finds first. Valid elements of an array then build no strings.
-    if (this.mode !== 'check' && !/^(undefined|p|"[^"\\]*")$/.test(path)) {
+    if (this.mode !== 'check' && !/^(undefined|p|\[\]|"[^"\\]*")$/.test(path)) {
       const { mode } = this;
       this.mode = 'check';
       const check = this.refFunction(target);
@@ -343,12 +516,16 @@ class Generator {
     if (type.constructor === RefType) {
       return this.ref(type, v, path);
     }
+    if (type.constructor === CoerceType) {
+      // The value validated, converted for the validation only (it is in no object or array).
+      return this.coerceCode(type.spec, v) + this.generate(type.type, v, path, known);
+    }
     if (this.visiting.has(type)) {
       return this.custom(type, v, path);
     }
     this.visiting.add(type);
     const isSchema = type.constructor === Schema || type.constructor === ClosedSchema;
-    const name = isSchema ? schemaName(path) : valuePath(path);
+    const name = this.nameOf(path, isSchema);
     const body = this.body(type, v, path, name, known);
     this.visiting.delete(type);
     if (body === undefined) {
@@ -358,9 +535,9 @@ class Generator {
     if (known) {
       return checks;
     }
-    const text = (suffix) => () => `${name} + ${JSON.stringify(suffix)}`;
-    const onUndefined = type.isMandatory ? this.emit(text(' is mandatory')) : '';
-    const onNull = type.isNullable ? '' : this.emit(text(' cannot be null'));
+    const text = (suffix, keyword) => messageAt(path, () => `${name} + ${JSON.stringify(suffix)}`, keyword);
+    const onUndefined = type.isMandatory ? this.emit(text(' is mandatory', 'required')) : '';
+    const onNull = type.isNullable ? '' : this.emit(text(' cannot be null', 'nullable'));
     if (!onUndefined && !onNull) {
       return checks ? `if (${v} !== undefined && ${v} !== null) {\n${checks}}\n` : '';
     }
@@ -376,7 +553,7 @@ class Generator {
     if (this.mode === 'first') {
       onInvalid = `return r(${node}, ${v}, ${path});`;
     } else if (this.mode === 'all') {
-      onInvalid = `a(out, ${node}, ${v}, ${path});`;
+      onInvalid = `out = a(out, ${node}, ${v}, ${path});`;
     }
     return `if (${invalid}) { ${onInvalid} }\n`;
   }
@@ -384,29 +561,37 @@ class Generator {
   // Checks for a value that is neither undefined nor null, as { checks, rest }; undefined when the type is not a
   // built-in one.
   body(type, v, path, name, known) {
-    const text = (suffix) => () => `${name} + ${JSON.stringify(suffix)}`;
+    // A message about this value: its text is its name and `suffix`; `keyword` names the check and `params` is the code
+    // of an object with its details (see messageAt()).
+    const text = (suffix, keyword, params) =>
+      messageAt(path, () => `${name} + ${JSON.stringify(suffix)}`, keyword, params);
     switch (type.constructor) {
       case Schema:
       case ClosedSchema:
         return this.schema(type, v, path, name, text, known);
       case ObjType:
         return {
-          checks: [[`typeof ${v} !== 'object' || Array.isArray(${v})`, text(' must be an object')]],
-          rest: type.schema ? this.generate(type.schema, v, name) : '',
+          checks: [
+            [
+              `typeof ${v} !== 'object' || Array.isArray(${v})`,
+              text(' must be an object', 'type', "{ type: 'object' }"),
+            ],
+          ],
+          rest: type.schema ? this.generate(type.schema, v, path) : '',
         };
       case ArrayOfType:
-        return this.arrayOf(type, v, name, text, known);
+        return this.arrayOf(type, v, path, name, text, known);
       case UnevaluatedType:
         return this.unevaluated(type, v, path, name);
       case AllOfType:
-        return { checks: [], rest: this.allOf(type, v, name) };
+        return { checks: [], rest: this.allOf(type, v, path, known) };
       case ConditionalType: {
         // Without branches it accepts every value (it is kept for what "if" evaluates, see unevaluated.js).
         if (!type.thenType && !type.elseType) {
           return { checks: [], rest: '' };
         }
         // Only the chosen branch is checked and reported, like ConditionalType.validate().
-        const branch = (branchType) => (branchType ? this.generate(branchType, v, name) : '');
+        const branch = (branchType) => (branchType ? this.generate(branchType, v, path) : '');
         const ok = this.name('ok');
         const rest = `let ${ok} = false;\n${this.inlineCheck(type.ifType, v, `${ok} = true;`)}if (${ok}) {\n${branch(
           type.thenType
@@ -414,13 +599,17 @@ class Generator {
         return { checks: [], rest };
       }
       case AnyOfType:
-        return { checks: [], rest: this.anyOf(type, v, name) };
+        return { checks: [], rest: this.anyOf(type, v, path) };
       case OneOfType:
-        return this.oneOf(type, v, name, text);
+        return this.oneOf(type, v, path, text);
+      case KeywordType:
+        return { checks: [this.keyword(type, v, path, name)] };
       case NotType: {
         const ok = this.name('ok');
         const pre = `let ${ok} = false;\n${this.inlineCheck(type.type, v, `${ok} = true;`)}`;
-        return { checks: [[ok, text(' must not match the excluded schema'), pre]] };
+        return {
+          checks: [[ok, text(' must not match the excluded schema', 'not'), pre]],
+        };
       }
       case StringType:
         return { checks: this.string(type, v, text, known) };
@@ -428,23 +617,45 @@ class Generator {
         return {
           checks: [
             ...this.string(type, v, text, known),
-            [`!${this.constant(new Set(type.options))}.has(${v})`, text(` must be one of: ${type.options.join(', ')}`)],
+            [
+              `!${this.constant(new Set(type.options))}.has(${v})`,
+              text(
+                ` must be one of: ${type.options.join(', ')}`,
+                'enum',
+                `{ allowedValues: ${JSON.stringify(type.options)} }`
+              ),
+            ],
           ],
         };
       case FloatType:
         return { checks: this.float(type, v, text) };
       case IntegerType:
-        return { checks: [...this.float(type, v, text), [`!Number.isInteger(${v})`, text(' must be an integer')]] };
+        return {
+          checks: [
+            ...this.float(type, v, text),
+            [`!Number.isInteger(${v})`, text(' must be an integer', 'type', "{ type: 'integer' }")],
+          ],
+        };
       case BooleanType:
-        return { checks: [[`typeof ${v} !== 'boolean'`, text(' must be a boolean')]] };
+        return {
+          checks: [[`typeof ${v} !== 'boolean'`, text(' must be a boolean', 'type', "{ type: 'boolean' }")]],
+        };
       case AnyType:
         return { checks: [] };
       case NeverType:
-        return { checks: [['true', text(' is not allowed')]] };
+        return { checks: [['true', text(' is not allowed', 'false')]] };
       case ValuesType:
-        return { checks: [[this.notOneOf(type.values, v), text(valuesMessage(type.values))]] };
+        return {
+          checks: [
+            [this.notOneOf(type.values, v), text(valuesMessage(type.values), ...this.valuesKeyword(type.values))],
+          ],
+        };
       case WhenType:
-        // The field name goes through unchanged, like WhenType.validate().
+        // The field name goes through unchanged, like WhenType.validate(). A value known to be of its JSON type
+        // needs no check.
+        if (known === type.jsonType) {
+          return { checks: [], rest: this.generate(type.type, v, path, known) };
+        }
         return {
           checks: [],
           rest: `if (${JSON_TYPE_CHECKS[type.jsonType](v)}) {\n${this.generate(type.type, v, path, type.jsonType)}}\n`,
@@ -455,7 +666,8 @@ class Generator {
   }
 
   string(type, v, text, known) {
-    const checks = known === 'string' ? [] : [[`typeof ${v} !== 'string'`, text(' must be a string')]];
+    const checks =
+      known === 'string' ? [] : [[`typeof ${v} !== 'string'`, text(' must be a string', 'type', "{ type: 'string' }")]];
     // Code points are only counted near the limit, like hasFewerCodePoints() and hasMoreCodePoints().
     const count = () => `${this.constant(codePointLength)}(${v})`;
     if (type.min !== undefined) {
@@ -466,7 +678,7 @@ class Generator {
         : `${v}.length < ${min}`;
       checks.push([
         allowEmpty ? `${tooShort} && ${v}.length !== 0` : tooShort,
-        text(` must be at least ${type.min} characters long`),
+        text(` must be at least ${type.min} characters long`, 'minLength', `{ limit: ${this.number(type.min)} }`),
       ]);
     }
     if (type.max !== undefined) {
@@ -474,31 +686,80 @@ class Generator {
       const tooLong = type.countCodePoints
         ? `(${v}.length > 2 * ${max} || (${v}.length > ${max} && ${count()} > ${max}))`
         : `${v}.length > ${max}`;
-      checks.push([tooLong, text(` must be at most ${type.max} characters long`)]);
+      checks.push([
+        tooLong,
+        text(` must be at most ${type.max} characters long`, 'maxLength', `{ limit: ${this.number(type.max)} }`),
+      ]);
     }
     if (type.pattern) {
-      checks.push([`!${this.constant(type.pattern)}.test(${v})`, text(' does not match the required pattern')]);
+      checks.push([
+        `!${this.constant(type.pattern)}.test(${v})`,
+        text(' does not match the required pattern', 'pattern', `{ pattern: ${JSON.stringify(type.pattern.source)} }`),
+      ]);
     }
+    if (type.formatCheck !== undefined) {
+      const check = this.constant(type.formatCheck);
+      const matches = type.formatCheck instanceof RegExp ? `${check}.test(${v})` : `${check}(${v})`;
+      checks.push([
+        `!${matches}`,
+        text(` must be a valid ${type.format}`, 'format', `{ format: ${JSON.stringify(type.format)} }`),
+      ]);
+    }
+    // Limits of the format, like StringType.failedLimit(): compare() gives a number, or undefined, which passes. The
+    // built-in comparisons are written out, with the limit worked out once (see compareDate() and the others in
+    // formats.js): dates compare as strings (the value has the format, so it is not empty), times and date-times by
+    // their time in ms, read once for every limit; a time of 0 or NaN compares as undefined.
+    let ms;
+    type.formatLimits.forEach(({ keyword, limit, compare }) => {
+      const { text: words, comparison } = FORMAT_LIMITS[keyword];
+      const literal = JSON.stringify(limit);
+      const message = text(` must be ${words} ${limit}`, keyword, `{ comparison: "${comparison}", limit: ${literal} }`);
+      const operator = FORMAT_LIMIT_FAILS[keyword].slice(0, -2);
+      if (compare === FORMAT_COMPARES.date) {
+        checks.push([`${v} ${operator} ${literal}`, message]);
+      } else if (TIME_PREFIXES.has(compare)) {
+        const prefix = TIME_PREFIXES.get(compare);
+        const limitMs = new Date(`${prefix}${limit}`).valueOf();
+        // A limit whose time is 0 compares as undefined: it never fails.
+        if (limitMs) {
+          let pre;
+          if (!ms) {
+            ms = this.name('ms');
+            pre = `const ${ms} = new Date(${prefix ? `"${prefix}" + ` : ''}${v}).valueOf();\n`;
+          }
+          checks.push([`${ms} && ${ms} ${operator} ${limitMs}`, message, pre]);
+        }
+      } else {
+        checks.push([`${this.constant(compare)}(${v}, ${literal}) ${FORMAT_LIMIT_FAILS[keyword]}`, message]);
+      }
+    });
     return checks;
   }
 
   float(type, v, text) {
     const limits = [
-      [type.min, '<', 'must be at least'],
-      [type.max, '>', 'must be at most'],
-      [type.exclusiveMin, '<=', 'must be greater than'],
-      [type.exclusiveMax, '>=', 'must be less than'],
+      [type.min, '<', 'must be at least', 'minimum'],
+      [type.max, '>', 'must be at most', 'maximum'],
+      [type.exclusiveMin, '<=', 'must be greater than', 'exclusiveMinimum'],
+      [type.exclusiveMax, '>=', 'must be less than', 'exclusiveMaximum'],
     ];
     const checks = [
-      [`!Number.isFinite(${v})`, text(' must be a number')],
+      [`!Number.isFinite(${v})`, text(' must be a number', 'type', "{ type: 'number' }")],
       ...limits
         .filter(([limit]) => limit !== undefined)
-        .map(([limit, operator, message]) => [`${v} ${operator} ${this.number(limit)}`, text(` ${message} ${limit}`)]),
+        .map(([limit, operator, message, keyword]) => [
+          `${v} ${operator} ${this.number(limit)}`,
+          text(` ${message} ${limit}`, keyword, `{ limit: ${this.number(limit)} }`),
+        ]),
     ];
     if (type.multipleOf !== undefined) {
       checks.push([
         `!Number.isInteger(${v} / ${this.number(type.multipleOf)})`,
-        text(` must be a multiple of ${type.multipleOf}`),
+        text(
+          ` must be a multiple of ${type.multipleOf}`,
+          'multipleOf',
+          `{ multipleOf: ${this.number(type.multipleOf)} }`
+        ),
       ]);
     }
     return checks;
@@ -506,6 +767,14 @@ class Generator {
 
   // Like ValuesType: `v` (neither undefined nor null) is deep-equal to none of the values. Plain values are compared
   // with code written for them; others with deepEqual(), only for objects as it is false for anything else.
+  // Keyword and params of the message of a ValuesType: const for one value, enum for several.
+  valuesKeyword(values) {
+    if (values.length === 1) {
+      return ['const', this.structured ? `{ allowedValue: ${this.constant(values[0])} }` : '{}'];
+    }
+    return ['enum', this.structured ? `{ allowedValues: ${this.constant(values)} }` : '{}'];
+  }
+
   notOneOf(values, v) {
     const matches = [];
     values.forEach((value) => {
@@ -522,29 +791,25 @@ class Generator {
     return matches.length ? `!(${matches.join(' || ')})` : 'true';
   }
 
-  // Errors of the first type that fails, like AllOfType.validate().
-  // The parts run in order. In 'all' mode only the errors of the first part that fails are reported, like
-  // AllOfType.validate(): each part runs once, building its messages, and a part that adds errors stops the others.
-  allOf(type, v, name) {
+  // The parts run in order; in 'all' mode each one adds its errors, like AllOfType.validate(). They get the field
+  // name of the allOf as it is (`path`), so a Schema part names its keys as it does on its own.
+  allOf(type, v, path, known = undefined) {
+    this.mayRepeat = this.mayRepeat || type.types.length > 1;
     const shared = this.shareMatches(type, v);
     let code = shared.map(({ vars }) => `let ${vars.join(' = false, ')} = false;\n`).join('');
-    const parts = type.types.map((item) => this.generate(item, v, name)).filter(Boolean);
-    if (this.mode !== 'all') {
-      code += parts.join('');
-    } else if (parts.length === 1) {
-      code += parts[0];
-    } else {
-      const failed = this.name('failed');
-      code += `let ${failed} = false;\n`;
-      parts.forEach((part, i) => {
-        if (i === parts.length - 1) {
-          code += `if (!${failed}) {\n${part}}\n`;
-        } else {
-          const count = this.name('n');
-          code += `if (!${failed}) {\nconst ${count} = out.length;\n${part}if (out.length !== ${count}) { ${failed} = true; }\n}\n`;
-        }
-      });
+    // Whether the value is a plain object is worked out once for all the parts (see schema()): reading __proto__ is
+    // slow on objects of many shapes. The value is neither undefined nor null here.
+    const plain = `${this.scope}:${v}`;
+    const declares = !this.plainDeclared.has(plain);
+    this.plainDeclared.add(plain);
+    const parts = type.types.map((item) => this.generate(item, v, path, known)).join('');
+    if (declares) {
+      this.plainDeclared.delete(plain);
+      if (new RegExp(`\\b${v}plain\\b`).test(parts)) {
+        code += `const ${v}plain = ${v}.__proto__ === OP;\n`;
+      }
     }
+    code += parts;
     shared.forEach(({ oneOf, previous }) => {
       if (previous === undefined) {
         this.sharedMatches.delete(oneOf);
@@ -571,7 +836,12 @@ class Generator {
     return [...oneOfs].map((oneOf) => {
       const previous = this.sharedMatches.get(oneOf);
       const vars = oneOf.types.map(() => this.name('matched'));
-      this.sharedMatches.set(oneOf, { vars, v, scope: this.scope, written: false });
+      this.sharedMatches.set(oneOf, {
+        vars,
+        v,
+        scope: this.scope,
+        written: false,
+      });
       return { oneOf, previous, vars };
     });
   }
@@ -584,17 +854,19 @@ class Generator {
   }
 
   // Code for a value that no alternative accepts: the errors of every alternative, like AnyOfType.validate().
-  noneMatches(types, v, name) {
+  noneMatches(types, v, path) {
     if (this.mode === 'check') {
       return this.fail;
     }
     if (this.mode === 'first') {
-      return this.generate(types[0], v, name);
+      return this.generate(types[0], v, path);
     }
-    return types.map((item) => this.generate(item, v, name)).join('');
+    this.mayRepeat = this.mayRepeat || types.length > 1;
+    return types.map((item) => this.generate(item, v, path)).join('');
   }
 
-  anyOf(type, v, name) {
+  // The alternatives get the field name as it is, like the parts of an allOf.
+  anyOf(type, v, path) {
     if (!type.types || type.types.length === 0) {
       return '';
     }
@@ -604,20 +876,33 @@ class Generator {
       const check = this.inlineCheck(item, v, `${ok} = true;`);
       code += i ? `if (!${ok}) {\n${check}}\n` : check;
     });
-    return `${code}if (!${ok}) {\n${this.noneMatches(type.types, v, name)}}\n`;
+    return `${code}if (!${ok}) {\n${this.noneMatches(type.types, v, path)}}\n`;
   }
 
   // Counts up to two matching alternatives, like OneOfType.countMatches().
-  oneOf(type, v, name, text) {
+  oneOf(type, v, path, text) {
     if (type.types.length === 0) {
-      return { checks: [['true', text(' must match exactly one schema, but matches none')]] };
+      return {
+        checks: [['true', text(' must match exactly one schema, but matches none', 'oneOf', '{ passing: 0 }')]],
+      };
     }
-    const m = this.name('m');
-    let rest = `let ${m} = 0;\n`;
     // An "unevaluated*" of the same allOf may reuse which alternatives match (see shareMatches()). When the oneOf
     // passes, every alternative has been checked.
     const shared = this.sharedMatches.get(type);
     const record = shared && shared.v === v && shared.scope === this.scope ? shared : undefined;
+    // With a discriminator, objects are only checked against the alternative their tag picks. Other values are
+    // checked here when the matches are recorded, else in a function of their own.
+    if (type.discriminator) {
+      const others = record ? this.countedOneOf(type, v, path, text, record) : undefined;
+      return { checks: [], rest: this.discriminated(type, v, path, record, others) };
+    }
+    return { checks: [], rest: this.countedOneOf(type, v, path, text, record) };
+  }
+
+  // Code counting the alternatives the value matches, up to two, recording them in `record` when given.
+  countedOneOf(type, v, path, text, record) {
+    const m = this.name('m');
+    let rest = `let ${m} = 0;\n`;
     type.types.forEach((item, i) => {
       const onPass = record ? `${m} += 1; ${record.vars[i]} = true;` : `${m} += 1;`;
       const check = this.inlineCheck(item, v, onPass);
@@ -626,25 +911,176 @@ class Generator {
     if (record) {
       record.written = true;
     }
-    const more = this.emit(text(' must match exactly one schema, but matches more than one'));
+    const more = this.emit(
+      text(' must match exactly one schema, but matches more than one', 'oneOf', '{ passing: 2 }')
+    );
     if (this.mode === 'check') {
       rest += `if (${m} !== 1) { ${this.fail} }\n`;
     } else {
-      rest += `if (${m} === 0) {\n${this.noneMatches(type.types, v, name)}} else if (${m} > 1) { ${more} }\n`;
+      rest += `if (${m} === 0) {\n${this.noneMatches(type.types, v, path)}} else if (${m} > 1) { ${more} }\n`;
     }
-    return { checks: [], rest };
+    return rest;
   }
 
-  arrayOf(type, v, name, text, known) {
-    const checks = known === 'array' ? [] : [[`!Array.isArray(${v})`, text(' must be an array')]];
+  // Code calling the function that validates `type` in the current mode (see refFunction()), for the value in `v`.
+  callFunction(type, v, path) {
+    const fn = this.refFunction(type);
+    if (this.mode === 'first') {
+      const e = this.name('e');
+      return `const ${e} = ${fn}(${v}, ${path});\nif (${e} !== undefined) { return ${e}; }\n`;
+    }
+    return this.mode === 'all' ? `out = ${fn}(${v}, ${path}, out);\n` : `if (!${fn}(${v})) { ${this.fail} }\n`;
+  }
+
+  // Code setting variable `d` to what the discriminator of `type` picks for the value in `x`, like OneOfType.pick().
+  pickCode(type, x, d) {
+    const { tag, mapping, auto } = type.discriminator;
+    const t = this.name('t');
+    const literal = JSON.stringify(tag);
+    const values = [...mapping.keys()];
+    const chain = values.map((value) => `${t} === ${JSON.stringify(value)} ? ${mapping.get(value)} : `).join('');
+    return (
+      `let ${d} = ${EVERY_TYPE};\n` +
+      `if (typeof ${x} === 'object' && ${x} !== null && !Array.isArray(${x})) {\n` +
+      `const ${t} = H.call(${x}, ${literal}) ? ${x}[${literal}] : undefined;\n` +
+      `${d} = ${chain}${auto ? EVERY_TYPE : NO_TYPE};\n}\n`
+    );
+  }
+
+  // Like OneOfType.validate() with a discriminator: an object is checked against the alternative the value of its tag
+  // (an own property) picks. An object whose tag picks none gets an error about the tag at its path, or with a
+  // discriminator found in a plain oneOf (`auto`) is checked as by oneOf, like other values. Those go to a function
+  // of their own (they are rare, and the validator stays small).
+  // With `record`, the alternative that matches is recorded there, and `others` checks the other values.
+  discriminated(type, v, path, record = undefined, others = undefined) {
+    const { tag, mapping, auto } = type.discriminator;
+    const t = this.name('t');
+    const tagPath = this.keyOf(path, JSON.stringify(tag));
+    const error = (suffix, kind) =>
+      this.emit(
+        messageAt(
+          tagPath,
+          () => `${this.nameOf(tagPath, false)} + ${JSON.stringify(suffix)}`,
+          'discriminator',
+          `{ error: "${kind}", tag: ${JSON.stringify(tag)}, tagValue: ${t} }`
+        )
+      );
+    const values = [...mapping.keys()];
+    const literal = JSON.stringify(tag);
+    // The tag is an own property, read like the keys of a Schema (see schema()): a value read from a plain object is
+    // its own unless Object.prototype has the key. Whether the object is plain is worked out here, once for the
+    // alternatives too, unless an enclosing allOf did.
+    const plain = `${this.scope}:${v}`;
+    const declares = !this.plainDeclared.has(plain);
+    this.plainDeclared.add(plain);
+    const isPlainOwn = tag in Object.prototype ? '' : `${v}plain || `;
+    let code = declares ? `const ${v}plain = ${v}.__proto__ === OP;\n` : '';
+    code += `let ${t} = ${v}[${literal}];\n`;
+    code += `if (${t} !== undefined && !(${isPlainOwn}H.call(${v}, ${literal}))) { ${t} = undefined; }\n`;
+    type.types.forEach((item, i) => {
+      const picks = values
+        .filter((value) => mapping.get(value) === i)
+        .map((value) => `${t} === ${JSON.stringify(value)}`);
+      // The value is known to be an object, which the alternative does not check again.
+      let branch = this.generate(item, v, path, 'object');
+      if (record) {
+        const matched = record.vars[i];
+        const onFail = this.mode === 'check' ? this.fail : this.generate(item, v, path, 'object');
+        branch = `${this.inlineCheck(item, v, `${matched} = true;`)}if (!${matched}) {\n${onFail}}\n`;
+      }
+      code += `${i ? 'else ' : ''}if (${picks.join(' || ')}) {\n${branch}}\n`;
+    });
+    if (declares) {
+      this.plainDeclared.delete(plain);
+    }
+    // The same alternatives without the discriminator, one node for each oneOf, so they share one function.
+    if (!this.plainOneOfs.has(type)) {
+      this.plainOneOfs.set(type, new OneOfType({ types: type.types, isMandatory: false, isNullable: true }));
+    }
+    const rest = others || this.callFunction(this.plainOneOfs.get(type), v, path);
+    if (auto) {
+      // No alternative accepts a tag that picks none (it gives each a "const" or an "enum"), unless it is missing.
+      const unknown = this.mode === 'check' ? this.fail : rest;
+      code += `else if (${t} === undefined) {\n${rest}} else {\n${unknown}}\n`;
+    } else {
+      code += `else if (${t} === undefined) { ${error(' is mandatory', 'tag')} }\n`;
+      code += `else if (typeof ${t} !== 'string') { ${error(' must be a string', 'tag')} }\n`;
+      code += `else { ${error(valuesMessage(values), 'mapping')} }\n`;
+    }
+    return `if (typeof ${v} === 'object' && !Array.isArray(${v})) {\n${code}} else {\n${rest}}\n`;
+  }
+
+  // Code assigning the defaults ([{ key, value, empty }], see assignDefaults()) missing in the object or array in `v`:
+  // each validation assigns a new copy.
+  defaultsCode(v, defaults = []) {
+    return defaults
+      .map((entry) => {
+        const property = `${v}[${JSON.stringify(entry.key)}]`;
+        return `if (${missingCode(property, entry)}) { ${property} = ${this.copyCode(entry.value)}; }\n`;
+      })
+      .join('');
+  }
+
+  // Code converting the value in variable `x` for a schema with `spec` (see coerce() in coerce.js) and, with `place`,
+  // writing the converted value there (the property or element it was read from).
+  coerceCode(spec, x, place = undefined) {
+    if (!spec) {
+      return '';
+    }
+    const matches = (value) => spec.types.map((type) => COERCE_TYPE_TESTS[type](value)).join(' || ');
+    const c = this.name('c');
+    const t = this.name('t');
+    let code = `if (${x} !== undefined && !(${matches(x)})) {\nlet ${c};\n`;
+    if (spec.array) {
+      code += `if (Array.isArray(${x}) && ${x}.length === 1) {\n${x} = ${x}[0];\nif (${matches(x)}) { ${c} = ${x}; }\n}\n`;
+    }
+    const conversions = spec.to.flatMap((type) => COERCE_CODE[type](x, t));
+    code += `const ${t} = typeof ${x};\nif (${c} === undefined) {\n`;
+    code += conversions
+      .map(([condition, value], i) => `${i ? 'else ' : ''}if (${condition}) { ${c} = ${value}; }\n`)
+      .join('');
+    code += `}\nif (${c} !== undefined) { ${x} = ${c};${place ? ` ${place} = ${c};` : ''} }\n}\n`;
+    return code;
+  }
+
+  // Code of a new copy of a default value.
+  copyCode(value) {
+    const copy = literalCode(value);
+    return copy === undefined ? `${this.constant(copyDefault)}(${this.constant(value)})` : copy;
+  }
+
+  // A keyword of your own, like KeywordType.validate(): its function is called with the value, when the value is of
+  // one of its JSON types.
+  keyword(type, v, path, name) {
+    const applies = type.jsonTypes
+      ? `(${type.jsonTypes.map((jsonType) => KEYWORD_TYPE_CHECKS[jsonType](v)).join(' || ')}) && `
+      : '';
+    const text =
+      typeof type.message === 'function'
+        ? () => `${name} + " " + ${this.constant(type.message)}(${v})`
+        : () => `${name} + ${JSON.stringify(` ${type.message}`)}`;
+    const passes =
+      type.check instanceof RegExp ? `${this.constant(type.check)}.test(${v})` : `${this.constant(type.check)}(${v})`;
+    return [`${applies}!${passes}`, messageAt(path, text, type.keyword)];
+  }
+
+  arrayOf(type, v, path, name, text, known) {
+    const checks =
+      known === 'array' ? [] : [[`!Array.isArray(${v})`, text(' must be an array', 'type', "{ type: 'array' }")]];
     if (type.min !== undefined) {
-      checks.push([`${v}.length < ${this.number(type.min)}`, text(` must have at least ${type.min} elements`)]);
+      checks.push([
+        `${v}.length < ${this.number(type.min)}`,
+        text(` must have at least ${type.min} elements`, 'minItems', `{ limit: ${this.number(type.min)} }`),
+      ]);
     }
     if (type.max !== undefined) {
-      checks.push([`${v}.length > ${this.number(type.max)}`, text(` must have at most ${type.max} elements`)]);
+      checks.push([
+        `${v}.length > ${this.number(type.max)}`,
+        text(` must have at most ${type.max} elements`, 'maxItems', `{ limit: ${this.number(type.max)} }`),
+      ]);
     }
     if (type.unique) {
-      checks.push([`${this.constant(hasDuplicates)}(${v})`, text(' must not have duplicate elements')]);
+      checks.push([`${this.constant(hasDuplicates)}(${v})`, text(' must not have duplicate elements', 'uniqueItems')]);
     }
     const min = type.minContains === undefined ? 1 : type.minContains;
     if (type.contains && (min !== 1 || type.maxContains !== undefined)) {
@@ -659,11 +1095,17 @@ class Generator {
       const containsChecks = [];
       if (min > 0) {
         const atLeast = min === 1 ? 'one matching element' : `${min} matching elements`;
-        containsChecks.push([`${count} < ${this.number(min)}`, text(` must contain at least ${atLeast}`)]);
+        containsChecks.push([
+          `${count} < ${this.number(min)}`,
+          text(` must contain at least ${atLeast}`, 'minContains', `{ limit: ${this.number(min)} }`),
+        ]);
       }
       if (type.maxContains !== undefined) {
         const atMost = type.maxContains === 1 ? 'one matching element' : `${type.maxContains} matching elements`;
-        containsChecks.push([`${count} > ${this.number(type.maxContains)}`, text(` must contain at most ${atMost}`)]);
+        containsChecks.push([
+          `${count} > ${this.number(type.maxContains)}`,
+          text(` must contain at most ${atMost}`, 'maxContains', `{ limit: ${this.number(type.maxContains)} }`),
+        ]);
       }
       if (containsChecks.length > 0) {
         containsChecks[0].push(pre);
@@ -679,25 +1121,38 @@ class Generator {
         x,
         `${found} = true;`
       )}}\n`;
-      checks.push([`!${found}`, text(' must contain at least one matching element'), pre]);
+      checks.push([`!${found}`, text(' must contain at least one matching element', 'contains'), pre]);
     }
     let rest = '';
+    const defaults = this.defaultsCode(v, type.defaults);
+    if (defaults) {
+      const first = known === 'array' ? 0 : 1;
+      if (checks.length > first) {
+        const [condition, message, pre = ''] = checks[first];
+        checks[first] = [condition, message, defaults + pre];
+      } else {
+        rest += defaults;
+      }
+    }
     if (Array.isArray(type.type)) {
       type.type.forEach((item, i) => {
         const x = this.name('v');
-        rest += `const ${x} = ${v}[${i}];\n${this.generate(item, x, `(${name} + "[${i}]")`)}`;
+        rest += `let ${x} = ${v}[${i}];\n${this.coerceCode(coerceSpecOf(item), x, `${v}[${i}]`)}`;
+        rest += this.generate(item, x, this.indexOf(path, name, i));
       });
       if (type.additionalType) {
         const i = this.name('i');
         const x = this.name('v');
-        rest += `for (let ${i} = ${type.type.length}; ${i} < ${v}.length; ${i} += 1) {\nconst ${x} = ${v}[${i}];\n`;
-        rest += `${this.generate(type.additionalType, x, `(${name} + "[" + ${i} + "]")`)}}\n`;
+        rest += `for (let ${i} = ${type.type.length}; ${i} < ${v}.length; ${i} += 1) {\nlet ${x} = ${v}[${i}];\n`;
+        rest += this.coerceCode(coerceSpecOf(type.additionalType), x, `${v}[${i}]`);
+        rest += `${this.generate(type.additionalType, x, this.indexOf(path, name, i))}}\n`;
       }
     } else if (type.type) {
       const i = this.name('i');
       const x = this.name('v');
-      rest += `for (let ${i} = 0; ${i} < ${v}.length; ${i} += 1) {\nconst ${x} = ${v}[${i}];\n`;
-      rest += `${this.generate(type.type, x, `(${name} + "[" + ${i} + "]")`)}}\n`;
+      rest += `for (let ${i} = 0; ${i} < ${v}.length; ${i} += 1) {\nlet ${x} = ${v}[${i}];\n`;
+      rest += this.coerceCode(coerceSpecOf(type.type), x, `${v}[${i}]`);
+      rest += `${this.generate(type.type, x, this.indexOf(path, name, i))}}\n`;
     }
     return { checks, rest };
   }
@@ -775,7 +1230,12 @@ class Generator {
         // Only its "contains" depends on the value.
         const prefix = Array.isArray(type.type) ? type.type.length : 0;
         const i = this.name('i');
-        const tuple = this.staticEvaluatedCode(kind, { all: false, keys: new Set(), patterns: [], prefix });
+        const tuple = this.staticEvaluatedCode(kind, {
+          all: false,
+          keys: new Set(),
+          patterns: [],
+          prefix,
+        });
         const contains = `if (${check(type.contains)}(x[${i}])) { s.add(${i}); }\n`;
         return `${tuple}for (let ${i} = 0; ${i} < x.length; ${i} += 1) {\n${contains}}\n`;
       }
@@ -784,9 +1244,14 @@ class Generator {
       case AnyOfType:
         return type.types.map(onMatch).join('');
       case OneOfType: {
-        // What the one alternative that matches evaluates, when exactly one does.
+        // What the one alternative that matches evaluates, when exactly one does. With a discriminator, only the one
+        // it picks can match.
         const oks = type.types.map(() => this.name('ok'));
-        const matches = type.types.map((item, i) => `const ${oks[i]} = ${check(item)}(x);\n`).join('');
+        const d = this.name('d');
+        const pick = type.discriminator ? this.pickCode(type, 'x', d) : '';
+        const picks = (i) => (type.discriminator ? `(${d} === ${EVERY_TYPE} || ${d} === ${i}) && ` : '');
+        const matches =
+          pick + type.types.map((item, i) => `const ${oks[i]} = ${picks(i)}${check(item)}(x);\n`).join('');
         const chosen = type.types.map((item, i) => `if (${oks[i]}) {\n${code(item)}}\n`).join('');
         return `${matches}if (${oks.join(' + ')} === 1) {\n${chosen}}\n`;
       }
@@ -872,7 +1337,20 @@ class Generator {
       case OneOfType: {
         // What the one alternative that matches evaluates, when exactly one does. The oneOf may have recorded which
         // match already.
-        const oks = this.matchesOf(type, v) || type.types.map(matches);
+        let oks = this.matchesOf(type, v);
+        if (!oks && type.discriminator) {
+          // Only the alternative the discriminator picks can match.
+          const d = this.name('d');
+          prelude.push(this.pickCode(type, v, d));
+          oks = type.types.map((item, i) => {
+            const ok = this.name('ok');
+            prelude.push(
+              `const ${ok} = (${d} === ${EVERY_TYPE} || ${d} === ${i}) && ${this.checkFunction(item)}(${v});\n`
+            );
+            return ok;
+          });
+        }
+        oks = oks || type.types.map(matches);
         const one = this.name('one');
         prelude.push(`const ${one} = ${oks.join(' + ')} === 1;\n`);
         const chosen = any(
@@ -946,7 +1424,7 @@ class Generator {
     }
     const x = this.name('v');
     if (type.kind === 'items') {
-      const code = this.generate(type.type, x, `(${name} + "[" + ${k} + "]")`);
+      const code = this.generate(type.type, x, this.indexOf(path, name, k));
       if (!code) {
         return { checks: [], rest: '' };
       }
@@ -955,10 +1433,11 @@ class Generator {
       rest += `${skip}const ${x} = ${v}[${k}];\n${code}}\n${close}}\n`;
       return { checks: [], rest };
     }
-    const keyName = keyPath(path, k);
+    const keyName = this.keyOf(path, k);
     let code;
     if (type.type.constructor === NeverType) {
-      code = this.emit(() => `"Unexpected key: " + ${keyName}`);
+      const unexpected = () => `"Unexpected key: " + ${this.nameOf(keyName, false)}`;
+      code = this.emit(messageAt(keyName, unexpected, 'unevaluatedProperties', `{ property: ${k} }`));
     } else {
       const inner = this.generate(type.type, x, keyName);
       // A schema that accepts every value gives no code.
@@ -977,72 +1456,120 @@ class Generator {
   // Same order as Schema.errors(): declared keys, then extra keys, then property counts.
   schema(type, v, path, name, text, known) {
     let keysCode = '';
+    // A key read to check it gets its default as it is read; the others get it first (see defaultsCode()).
+    const defaultOf = new Map((type.defaults || []).map((entry) => [entry.key, entry]));
     type.keys.forEach((key) => {
       const x = this.name('v');
       const literal = JSON.stringify(key);
-      const code = this.generate(type.schema[key], x, keyPath(path, literal));
+      const code = this.generate(type.schema[key], x, this.keyOf(path, literal));
       // A key whose type accepts anything is not read.
       if (code) {
         // Own properties only, like Schema's ownValue(). A value read from a plain object is its own unless
         // Object.prototype has the key, so the slower own-property check only runs in that case or for other
         // prototypes. The prototype is read with __proto__, as there: Object.getPrototypeOf() halves the speed.
         keysCode += `let ${x} = ${v}[${literal}];\n`;
-        keysCode += `if (${x} !== undefined && (!${v}plain || ${literal} in OP) && !H.call(${v}, ${literal})) { ${x} = undefined; }\n`;
+        const isOwn = `(!${v}plain || ${literal} in OP) && !H.call(${v}, ${literal})`;
+        const entry = defaultOf.get(key);
+        if (entry) {
+          defaultOf.delete(key);
+          const copy = `${x} = ${v}[${literal}] = ${this.copyCode(entry.value)};`;
+          keysCode += `if (${missingCode(x, entry)}) { ${copy} } else if (${isOwn}) { ${x} = undefined; }\n`;
+        } else {
+          keysCode += `if (${x} !== undefined && ${isOwn}) { ${x} = undefined; }\n`;
+        }
+        // With coerceTypes, the value is converted to the types of its schema and written back.
+        keysCode += this.coerceCode(coerceSpecOf(type.schema[key]), x, `${v}[${literal}]`);
         keysCode += code;
+      } else if (defaultOf.has(key)) {
+        // Not read, but its default is assigned in the order of the keys, as ajv does.
+        keysCode += this.defaultsCode(v, [defaultOf.get(key)]);
+        defaultOf.delete(key);
       }
     });
-    let rest = keysCode ? `const ${v}plain = ${v}.__proto__ === OP;\n${keysCode}` : '';
-    const checkExtra = !type.isOpen || type.additionalType;
+    // An enclosing allOf of the same function may have worked it out already.
+    const isDeclared = this.plainDeclared.has(`${this.scope}:${v}`);
+    let rest = keysCode && !isDeclared ? `const ${v}plain = ${v}.__proto__ === OP;\n${keysCode}` : keysCode;
+    // The defaults of the keys not read are assigned first, like Schema.isValid() does with all of them.
+    rest = this.defaultsCode(v, [...defaultOf.values()]) + rest;
+    const checkExtra = !type.isOpen || type.additionalType || type.removeAdditional;
     const countKeys = type.minProperties !== undefined || type.maxProperties !== undefined;
     const { patternTypes } = type;
     if (checkExtra || countKeys || patternTypes.length > 0 || type.propertyNameType) {
       const count = this.name('count');
       const k = this.name('k');
-      const keyName = keyPath(path, k);
+      const keyName = this.keyOf(path, k);
       rest += `let ${count} = 0;\nfor (const ${k} in ${v}) {\n`;
       rest += `if (!H.call(${v}, ${k})) { continue; }\n${count} += 1;\n`;
       if (type.propertyNameType) {
-        rest += this.generate(type.propertyNameType, k, `("Key " + ${keyName})`);
+        rest += this.generate(type.propertyNameType, k, this.propertyNameOf(path, k));
       }
       // Keys matching a pattern satisfy its type and are not extra keys, like Schema.errors().
       const matched = this.name('matched');
+      this.mayRepeat = this.mayRepeat || patternTypes.length > 1;
       if (patternTypes.length > 0) {
         rest += `let ${matched} = false;\n`;
         patternTypes.forEach(({ pattern, type: patternType }) => {
           const x = this.name('v');
-          rest += `if (${this.constant(pattern)}.test(${k})) {\n${matched} = true;\nconst ${x} = ${v}[${k}];\n`;
+          rest += `if (${this.constant(pattern)}.test(${k})) {\n${matched} = true;\nlet ${x} = ${v}[${k}];\n`;
+          rest += this.coerceCode(coerceSpecOf(patternType), x, `${v}[${k}]`);
           rest += `${this.generate(patternType, x, keyName)}}\n`;
         });
       }
       if (checkExtra) {
+        // With removeAdditional, a key only "required" names is additional (see Schema.isDeclared()).
+        const keys = type.removeAdditional && type.propertyKeys ? type.propertyKeys : type.keys;
         const declared =
-          type.keys.length <= MAX_INLINE_KEYS
-            ? type.keys.map((key) => `${k} === ${JSON.stringify(key)}`).join(' || ') || 'false'
-            : `${this.constant(type.keySet)}.has(${k})`;
+          keys.length <= MAX_INLINE_KEYS
+            ? keys.map((key) => `${k} === ${JSON.stringify(key)}`).join(' || ') || 'false'
+            : `${this.constant(new Set(keys))}.has(${k})`;
         const accepted = patternTypes.length > 0 ? `${declared} || ${matched}` : declared;
         rest += `if (!(${accepted})) {\n`;
-        if (!type.isOpen) {
-          rest += this.emit(() => `"Unexpected key: " + ${keyName}`);
+        // removeAdditional: the key is deleted (see Schema.removes()). It still counts for minProperties and
+        // maxProperties, as in ajv.
+        const remove = `delete ${v}[${k}];\n`;
+        if (type.removeAdditional === 'delete') {
+          rest += remove;
+        } else if (type.removeAdditional === 'failing') {
+          rest += `if (!${this.checkFunction(type.additionalType)}(${v}[${k}])) {\n${remove}}\n`;
+        } else if (!type.isOpen) {
+          const unexpected = () => `"Unexpected key: " + ${this.nameOf(keyName, false)}`;
+          rest += this.emit(messageAt(keyName, unexpected, 'additionalProperties', `{ property: ${k} }`));
         } else {
           const x = this.name('v');
-          rest += `const ${x} = ${v}[${k}];\n${this.generate(type.additionalType, x, keyName)}`;
+          rest += `let ${x} = ${v}[${k}];\n${this.coerceCode(coerceSpecOf(type.additionalType), x, `${v}[${k}]`)}`;
+          rest += this.generate(type.additionalType, x, keyName);
         }
         rest += '}\n';
       }
       rest += '}\n';
       if (type.minProperties !== undefined) {
-        const message = text(` must have at least ${type.minProperties} properties`);
+        const message = text(
+          ` must have at least ${type.minProperties} properties`,
+          'minProperties',
+          `{ limit: ${this.number(type.minProperties)} }`
+        );
         rest += `if (${count} < ${this.number(type.minProperties)}) { ${this.emit(message)} }\n`;
       }
       if (type.maxProperties !== undefined) {
-        const message = text(` must have at most ${type.maxProperties} properties`);
+        const message = text(
+          ` must have at most ${type.maxProperties} properties`,
+          'maxProperties',
+          `{ limit: ${this.number(type.maxProperties)} }`
+        );
         rest += `if (${count} > ${this.number(type.maxProperties)}) { ${this.emit(message)} }\n`;
       }
     }
     rest += this.dependencies(type, v, path);
     return {
       checks:
-        known === 'object' ? [] : [[`typeof ${v} !== 'object' || Array.isArray(${v})`, text(' must be an object')]],
+        known === 'object'
+          ? []
+          : [
+              [
+                `typeof ${v} !== 'object' || Array.isArray(${v})`,
+                text(' must be an object', 'type', "{ type: 'object' }"),
+              ],
+            ],
       rest,
     };
   }
@@ -1058,8 +1585,12 @@ class Generator {
           code = required
             .map((property) => {
               const propertyLiteral = JSON.stringify(property);
-              const message = () =>
-                `${keyPath(path, propertyLiteral)} + " is mandatory when " + ${keyPath(path, literal)} + " is present"`;
+              // About the property that is missing.
+              const missing = this.keyOf(path, propertyLiteral);
+              const present = this.nameOf(this.keyOf(path, literal), false);
+              const text = () => `${this.nameOf(missing, false)} + " is mandatory when " + ${present} + " is present"`;
+              const params = `{ property: ${literal}, missingProperty: ${propertyLiteral} }`;
+              const message = messageAt(missing, text, 'dependentRequired', params);
               return `if (!${isPresent(propertyLiteral)}) { ${this.emit(message)} }\n`;
             })
             .join('');
@@ -1071,20 +1602,42 @@ class Generator {
       .join('');
   }
 
-  build(type) {
-    const main = this.generate(type, 'v0', 'undefined');
-    const results = { check: ['', 'true'], first: ['', 'undefined'], all: ['const out = [];\n', 'out'] };
+  // Source of the body of a function that takes the constants (c), the nodes (n) and the helpers r and a, and returns
+  // the validation function. standalone.js writes it out with the constants as code.
+  source(type) {
+    const main = this.generate(type, 'v0', this.rootPath());
+    // Every error once, like toErrors(): parts of an allOf, or alternatives, can report the same one.
+    const results = {
+      check: ['', 'true'],
+      first: ['', 'undefined'],
+      all: [
+        'let out;\n',
+        this.mayRepeat ? '(out === undefined ? [] : out.length > 1 ? U(out) : out)' : '(out === undefined ? [] : out)',
+      ],
+    };
     const [start, end] = results[this.mode];
     const prologue = [
       '"use strict";',
       'const H = Object.prototype.hasOwnProperty;',
       'const OP = Object.prototype;',
       'function J(fieldName, key) { return fieldName ? fieldName + "." + key : key; }',
+      // Adds an error to the list, which is made with the first one.
+      'function P(out, e) { if (out === undefined) { return [e]; } out.push(e); return out; }',
+      // The list itself when no error repeats, which is the usual case: a new list is only built when one does. Error
+      // objects repeat when their messages do.
+      this.structured
+        ? 'function U(e) { const m = e.map((x) => x.message); for (let i = 1; i < m.length; i += 1) { if (m.indexOf(m[i]) < i) { return e.filter((x, j) => m.indexOf(m[j]) === j); } } return e; }'
+        : 'function U(e) { for (let i = 1; i < e.length; i += 1) { if (e.indexOf(e[i]) < i) { return Array.from(new Set(e)); } } return e; }',
       '',
     ].join('\n');
-    const source = `${prologue}${this.functions.join('')}return function validate(v0) {\n${start}${main}return ${end};\n};`;
+    return `${prologue}${this.functions.join('')}return function validate(v0) {\n${start}${main}return ${end};\n};`;
+  }
+
+  build(type) {
+    const source = this.source(type);
+    const [first, push] = this.structured ? [firstErrorObject, pushErrorObjects] : [firstError, pushErrors];
     // eslint-disable-next-line no-new-func -- code generation is the point: only keys, texts (JSON.stringify) and finite numbers are embedded
-    return new Function('c', 'n', 'r', 'a', source)(this.constants, this.nodes, firstError, pushErrors);
+    return new Function('c', 'n', 'r', 'a', source)(this.constants, this.nodes, first, push);
   }
 }
 
@@ -1107,23 +1660,53 @@ function compileErrors(type) {
 // Returns a (value) => errors function: every error message by default (empty when valid), or with
 // allErrors: false only the first one, which stops at the first failing check.
 // With errors: false it returns a (value) => boolean function instead, which builds no messages at all.
-function compileType(type, options = {}) {
+// The mode of the generated code for the options of compileType(): 'check', 'first' or 'all'.
+// The mode of the generated code for the options of compileType() ('check', 'first' or 'all'), and whether errors are
+// objects. errors: true (default) gives messages, 'objects' error objects (see error-objects.js), false true or false.
+function modeOf(options = {}) {
   const { allErrors = true, errors = true } = options;
-  if (!errors) {
-    return compileIsValid(type);
+  if (errors !== true && errors !== false && errors !== 'objects') {
+    throw new Error(`Unsupported option "errors": ${JSON.stringify(errors)} is not true, false or 'objects'`);
   }
-  if (allErrors) {
-    // One pass: checking validity first would walk invalid values twice.
-    return compileErrors(type);
+  if (errors === false) {
+    return { mode: 'check', structured: false };
   }
-  const getFirstError = compileFirstError(type);
+  return {
+    mode: allErrors ? 'all' : 'first',
+    structured: errors === 'objects',
+  };
+}
+
+// The generated code of compileType(type, options), for standalone.js: the source (see Generator.source()), with
+// the constants and the nodes it uses, and its mode.
+function generateSource(type, options = {}) {
+  const { mode, structured } = modeOf(options);
+  const generator = new Generator(mode, structured);
+  const source = generator.source(type);
+  return {
+    mode,
+    source,
+    constants: generator.constants,
+    nodes: generator.nodes,
+  };
+}
+
+function compileType(type, options = {}) {
+  const { mode, structured } = modeOf(options);
+  // In 'all' mode one pass: checking validity first would walk invalid values twice.
+  const validate = new Generator(mode, structured).build(type);
+  if (mode !== 'first') {
+    return validate;
+  }
+  // The first error in a list.
   return (value) => {
-    const error = getFirstError(value);
+    const error = validate(value);
     return error === undefined ? [] : [error];
   };
 }
 
 module.exports = {
+  generateSource,
   compileErrors,
   compileFirstError,
   compileIsValid,

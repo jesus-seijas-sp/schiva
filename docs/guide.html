@@ -6,7 +6,7 @@
     <title>Guide · schiva</title>
     <meta
       name="description"
-      content="How to use schiva: the schema DSL, JSON Schema (draft-07, 2019-09, 2020-12), validation modes, errors, types of your own, security and performance."
+      content="How to use schiva: the schema DSL, JSON Schema (draft-04 to 2020-12), validation modes, errors, types of your own, security and performance."
     />
     <link rel="canonical" href="https://schiva.js.org/guide.html" />
     <link
@@ -24,6 +24,7 @@
         <nav class="nav">
           <a href="guide.html" aria-current="page">Guide</a>
           <a class="hide-small" href="#performance">Performance</a>
+          <a class="hide-small" href="migrating-from-ajv.html">From ajv</a>
           <a href="https://github.com/jesus-seijas-sp/schiva">GitHub</a>
           <a class="hide-small" href="https://www.npmjs.com/package/schiva">npm</a>
           <button class="theme-toggle" type="button" aria-label="Switch between light and dark theme">
@@ -43,6 +44,7 @@
           <li><a href="#getting-started">Getting started</a></li>
           <li><a href="#modes">Modes</a></li>
           <li><a href="#compile-once">Compile once</a></li>
+          <li><a href="#standalone">Standalone code</a></li>
           <li><a href="#choosing">DSL or JSON Schema</a></li>
         </ul>
         <h4>Reference</h4>
@@ -50,6 +52,7 @@
           <li><a href="#schema-dsl">Schema DSL</a></li>
           <li><a href="#json-schema">JSON Schema</a></li>
           <li><a href="#errors">Errors</a></li>
+          <li><a href="#typescript">TypeScript</a></li>
           <li><a href="#custom-types">Types of your own</a></li>
           <li><a href="#api">API</a></li>
         </ul>
@@ -58,6 +61,7 @@
           <li><a href="#security">Security</a></li>
           <li><a href="#performance">Performance</a></li>
           <li><a href="#faq">FAQ</a></li>
+          <li><a href="migrating-from-ajv.html">Migrating from ajv</a></li>
         </ul>
       </aside>
 
@@ -125,6 +129,7 @@ validate({ id: 'ab' }); // ['id does not match the required pattern']</code></pr
               <tr><td>(none)</td><td>every error message, <code>[]</code> when valid</td><td>messages are shown or logged</td></tr>
               <tr><td><code>{ allErrors: false }</code></td><td>only the first error message, <code>[]</code> when valid</td><td>one message is enough; stops at the first failing check</td></tr>
               <tr><td><code>{ errors: false }</code></td><td><code>true</code> or <code>false</code></td><td>only validity matters; builds no messages</td></tr>
+              <tr><td><code>{ errors: 'objects' }</code></td><td>every error as an object, <code>[]</code> when valid (with <code>allErrors: false</code>, the first)</td><td>errors are handled by code: forms, translations; see <a href="#error-objects">Error objects</a></td></tr>
             </tbody>
           </table>
         </div>
@@ -158,10 +163,39 @@ app.post('/orders', (req, res) => {
 });</code></pre>
         <div class="callout">
           <p>
-            The generated code uses <code>new Function</code>, so it does not run where code generation is forbidden,
-            for example with a strict Content Security Policy. See <a href="#security">Security</a>.
+            <code>compile()</code> creates the function with <code>new Function</code>, which does not run where code
+            generation is forbidden (for example with a strict Content Security Policy). There, generate
+            <a href="#standalone">standalone code</a> when building.
           </p>
         </div>
+
+        <h2 id="standalone">Standalone code</h2>
+        <p>
+          <code>standaloneCode(type, options)</code> returns the code of a validator as the source of a JavaScript
+          module, to save to a file when building and load like any other. Loading it generates no code, so it runs
+          under a strict Content Security Policy (without <code>'unsafe-eval'</code>) and in runtimes that forbid code
+          generation, and it needs nothing else: not even schiva, as the few helpers it calls are written into it.
+        </p>
+        <pre><code class="language-js">// build-validators.js, run when building
+const fs = require('fs');
+const { standaloneCode, standaloneModule, standaloneJsonSchema } = require('schiva');
+
+fs.writeFileSync('validate-person.js', standaloneCode(person)); // module.exports = the validation function
+fs.writeFileSync('validators.mjs', standaloneModule({ isPerson: person, isOrder: order }, { errors: false, format: 'esm' }));
+fs.writeFileSync('validate-address.js', standaloneJsonSchema(addressSchema, { schemas: [countrySchema] }));</code></pre>
+        <pre><code class="language-js">// In the application
+const validatePerson = require('./validate-person.js');
+import { isPerson } from './validators.mjs';</code></pre>
+        <p>
+          The options are those of <code>compile()</code> (<code>allErrors</code>, <code>errors</code>) and
+          <code>format</code>: <code>'commonjs'</code> (the default) or <code>'esm'</code>. <code>standaloneCode()</code>
+          exports one function (<code>module.exports</code>, or the default export), and
+          <code>standaloneModule()</code> one for each name. <code>standaloneJsonSchema()</code> takes the options of
+          <code>compileJsonSchema()</code> too. The functions return the same results as the ones
+          <code>compile()</code> gives: schiva checks it on every test of the JSON-Schema-Test-Suite
+          (<code>pnpm run conformance draft2020-12 --standalone</code>). <a href="#custom-types">Types of your own</a>
+          cannot be written out, as their <code>validate()</code> runs when validating, and throw.
+        </p>
 
         <h2 id="choosing">DSL or JSON Schema</h2>
         <p>Both compile to the same types and the same generated code, so the speed is the same.</p>
@@ -215,7 +249,7 @@ const order = new Schema(
               <tr><th>Type</th><th>Options</th></tr>
             </thead>
             <tbody>
-              <tr><td><code>String</code></td><td><code>min</code>, <code>max</code> (length), <code>pattern</code> (RegExp), <code>allowEmpty</code>, <code>countCodePoints</code></td></tr>
+              <tr><td><code>String</code></td><td><code>min</code>, <code>max</code> (length), <code>pattern</code> (RegExp), <code>format</code> (a <a href="#formats">built-in format</a>), <code>allowEmpty</code>, <code>countCodePoints</code></td></tr>
               <tr><td><code>Integer</code>, <code>Float</code></td><td><code>min</code>, <code>max</code>, <code>exclusiveMin</code>, <code>exclusiveMax</code>, <code>multipleOf</code></td></tr>
               <tr><td><code>Boolean</code>, <code>Any</code>, <code>Never</code></td><td></td></tr>
               <tr><td><code>Enum</code></td><td><code>options</code> (strings)</td></tr>
@@ -279,10 +313,11 @@ node.compile()({ value: 1, children: [{ value: 2, children: [{ value: 'x' }] }] 
           <code>compileJsonSchema(json, options)</code> compiles it. Every validation keyword of draft-07 is
           supported, along with <code>definitions</code> (or <code>$defs</code>) and <code>$ref</code> (JSON pointers,
           <code>$id</code> base URIs and anchors, recursive schemas). String lengths count Unicode code points, as the
-          specification says. Drafts 2019-09 and 2020-12 are supported but for dynamic references: see <a href="#drafts">Drafts</a>.
+          specification says. Drafts 04, 06, 2019-09 and 2020-12 are supported completely: see
+          <a href="#drafts">Drafts</a>.
         </p>
 
-        <h3 id="strict">Unknown keywords throw</h3>
+        <h3 id="strict">Unknown keywords</h3>
         <p>A keyword schiva does not know throws when compiling, with the place where it was found:</p>
         <pre><code class="language-js">compileJsonSchema({ type: 'string', maxLenght: 10 });
 // Error: Unsupported JSON Schema keyword "maxLenght" at #</code></pre>
@@ -291,23 +326,243 @@ node.compile()({ value: 1, children: [{ value: 2, children: [{ value: 'x' }] }] 
           <code>$comment</code>, <code>readOnly</code>, <code>writeOnly</code>, <code>deprecated</code>) are accepted
           and ignored.
         </p>
-        <div class="callout">
-          <p>
-            <strong><code>format</code> is not checked.</strong> Draft-07 makes checking it optional, and schiva
-            accepts it as an annotation. Use <code>pattern</code>, or a <a href="#custom-types">type of your own</a>,
-            for values such as emails or dates.
-          </p>
-        </div>
         <p>
           The content keywords (<code>contentMediaType</code>, <code>contentEncoding</code>,
           <code>contentSchema</code>) are annotations too.
         </p>
+        <p>
+          Keywords of your own, such as the <code>x-</code> extensions of OpenAPI, can be declared as annotations with
+          the option <code>keywords</code>, and typos are still caught. <code>strict: false</code> ignores every unknown
+          keyword instead, and also the ones of other drafts and the ones a <code>type</code> excludes, as the JSON
+          Schema standard reads a schema:
+        </p>
+        <pre><code class="language-js">compileJsonSchema(schema, { keywords: ['x-internal', 'example'] });
+compileJsonSchema(schema, { strict: false }); // like ajv's strict: false</code></pre>
+
+        <h3 id="keywords">Keywords of your own</h3>
+        <p>
+          The option <code>keywords</code> also takes definitions of keywords that check values, like ajv's
+          <code>addKeyword()</code>. A definition has its <code>keyword</code>, optionally the JSON <code>type</code>
+          of the values it checks (every value by default), and one function:
+        </p>
+        <ul>
+          <li>
+            <code>validate(value, data, parentSchema)</code>: called for each value with the value of the keyword;
+            <code>true</code> when valid.
+          </li>
+          <li>
+            <code>compile(value, parentSchema)</code>: called once, when compiling; gives the function checking the
+            data, or a regular expression that the data must match.
+          </li>
+          <li>
+            <code>macro(value, parentSchema)</code>: gives a schema to check instead, so the keyword is other keywords
+            written shorter. It compiles to the same code as those keywords.
+          </li>
+        </ul>
+        <p>
+          <code>message</code> gives the text of its error after the name of the value, or a function
+          <code>(value, data) =&gt; text</code> does (<code>must pass the "&lt;keyword&gt;" keyword</code> by default).
+          Its error objects have its name as <code>keyword</code>.
+        </p>
+        <pre><code class="language-js">const even = { keyword: 'even', type: 'integer', validate: (value, data) =&gt; !value || data % 2 === 0, message: 'must be even' };
+const between = { keyword: 'between', type: 'number', macro: ([min, max]) =&gt; ({ minimum: min, maximum: max }) };
+
+const validate = compileJsonSchema(
+  { properties: { seats: { type: 'integer', even: true, between: [2, 8] } } },
+  { keywords: [even, between] }
+);
+
+validate({ seats: 3 }); // ['seats must be even']
+validate({ seats: 10 }); // ['seats must be at most 8']</code></pre>
+        <p>
+          <code>ajvKeywords()</code> gives the keywords of
+          <a href="https://github.com/ajv-validator/ajv-keywords">ajv-keywords</a>, with the same results:
+          <code>typeof</code>, <code>instanceof</code>, <code>range</code>, <code>exclusiveRange</code>,
+          <code>regexp</code>, <code>uniqueItemProperties</code>, <code>allRequired</code>, <code>anyRequired</code>,
+          <code>oneRequired</code>, <code>patternRequired</code>, <code>prohibited</code>, <code>deepProperties</code>
+          and <code>deepRequired</code>. Name the ones you use, or leave the list out for all of them:
+        </p>
+        <pre><code class="language-js">compileJsonSchema(schema, { keywords: ajvKeywords(['range', 'regexp']) });
+compileJsonSchema(schema, { keywords: ['x-internal', ...ajvKeywords()] });</code></pre>
+        <p>
+          <code>transform</code> changes the data and <code>dynamicDefaults</code> computes defaults when validating
+          (schiva only assigns fixed defaults, see <a href="#changing-the-data">useDefaults</a>), and <code>select</code>
+          needs <code>$data</code> references, so they are left out. Macros and regular expressions
+          can be written into <a href="#standalone">standalone code</a>, functions cannot: among ajv-keywords,
+          <code>range</code>, <code>exclusiveRange</code>, <code>regexp</code> (without the flags g and y),
+          <code>allRequired</code>, <code>anyRequired</code>, <code>oneRequired</code>, <code>prohibited</code> and
+          <code>deepProperties</code> can.
+        </p>
+
+        <h3 id="changing-the-data">Changing the data</h3>
+        <p>
+          schiva only checks values unless you ask for one of these options, which change the value being validated as
+          ajv's do:
+        </p>
+        <ul>
+          <li>
+            <code>useDefaults: true</code> assigns the <code>default</code> of each missing property (in
+            <code>properties</code>) and tuple element before checking it, so <code>required</code> is satisfied and
+            the default is checked too. <code>useDefaults: 'empty'</code> also replaces <code>null</code> and
+            <code>''</code>. Each validation assigns a new copy of the default.
+          </li>
+          <li>
+            <code>removeAdditional: true</code> removes the additional properties where
+            <code>additionalProperties</code> is <code>false</code>, instead of reporting them. <code>'all'</code>
+            removes every additional property of a schema with <code>properties</code> or
+            <code>additionalProperties</code>, and <code>'failing'</code> the ones that fail
+            <code>additionalProperties</code> (and where it is <code>false</code>). The keys a
+            <code>patternProperties</code> pattern matches are not additional.
+          </li>
+          <li>
+            <code>coerceTypes: true</code> converts a value that is not of the types its schema's <code>type</code> asks
+            for, trying them in order, and writes the converted value back into its object or array: numeric strings,
+            booleans and <code>null</code> to numbers (integers only when whole), numbers and booleans to strings
+            (<code>null</code> to <code>''</code>), <code>'true'</code>, <code>'false'</code>, <code>1</code>,
+            <code>0</code> and <code>null</code> to booleans, and <code>''</code>, <code>0</code> and <code>false</code>
+            to <code>null</code>. <code>coerceTypes: 'array'</code> also wraps a value into an array, and takes the
+            element of an array of one where a single value is expected. The value validated itself, in no object or
+            array, is converted for the validation only.
+          </li>
+        </ul>
+        <pre><code class="language-js">const validate = compileJsonSchema(
+  {
+    type: 'object',
+    properties: { name: { type: 'string' }, role: { type: 'string', default: 'user' } },
+    required: ['name'],
+    additionalProperties: false,
+  },
+  { useDefaults: true, removeAdditional: true }
+);
+
+const user = { name: 'Ann', password: 'secret' };
+validate(user); // []
+user; // { name: 'Ann', role: 'user' }</code></pre>
+        <p>
+          A value is converted by its schema's own <code>type</code> (or else by the first part of its
+          <code>allOf</code>, or the schema its <code>$ref</code> points to), once; ajv also converts it inside
+          <code>anyOf</code> and <code>oneOf</code> schemas, even ones that then do not apply. List the types in one
+          <code>type</code> instead: <code>type: ['number', 'boolean']</code>. ajv only takes the element of an array of
+          one for schemas with one type.
+        </p>
+        <p>
+          As in ajv, defaults inside <code>anyOf</code>, <code>oneOf</code>, <code>not</code> and <code>if</code>
+          (directly or through <code>$ref</code>) are not assigned, as those schemas may not apply: they throw, or are
+          ignored with <code>strict: false</code>. <code>required</code>, <code>minProperties</code> and
+          <code>maxProperties</code> see the additional properties before they are removed. Removing properties inside
+          <code>anyOf</code>, <code>oneOf</code>, <code>not</code> or <code>if</code> can remove them while trying a
+          schema that then does not apply, and the result depends on the order the keywords run, which is not always
+          ajv's: remove them in the schemas that always apply. An invalid value may be changed only in part, more so when
+          stopping at the first error.
+        </p>
+
+        <h3 id="discriminator">Discriminator</h3>
+        <p>
+          The <code>discriminator</code> of OpenAPI picks the <code>oneOf</code> schema that applies by the value of a
+          property, which must be required. An object is only checked against the schema its value picks, with the
+          errors of that schema, which is several times faster than trying every schema; a value that picks none gets
+          an error about the property. Other values are checked as by <code>oneOf</code>. The value of each schema
+          comes from, in this order:
+        </p>
+        <ul>
+          <li><code>mapping</code>: values to references or to schema names, as in OpenAPI.</li>
+          <li>
+            A <code>const</code> or an <code>enum</code> that the schema (or the schema it references) gives the
+            property, as ajv reads it.
+          </li>
+          <li>
+            Else the name of the schema it references: <code>Dog</code> for <code>#/components/schemas/Dog</code>,
+            OpenAPI's implicit mapping.
+          </li>
+        </ul>
+        <pre><code class="language-js">const validate = compileJsonSchema({
+  $defs: {
+    Cat: { type: 'object', properties: { lives: { type: 'integer' } }, required: ['petType', 'lives'] },
+    Dog: { type: 'object', properties: { bark: { type: 'boolean' } }, required: ['petType'] },
+  },
+  oneOf: [{ $ref: '#/$defs/Cat' }, { $ref: '#/$defs/Dog' }],
+  discriminator: { propertyName: 'petType', mapping: { cat: '#/$defs/Cat', dog: 'Dog' } },
+});
+
+validate({ petType: 'cat' }); // ['lives is mandatory']
+validate({ petType: 'cow' }); // ['petType must be one of: cat, dog']</code></pre>
+        <p>
+          With values from <code>const</code> and <code>enum</code> alone, no other schema accepts the value, so the
+          result is the one of <code>oneOf</code>. With <code>mapping</code> or names, the property picks the schema as
+          OpenAPI means it, whatever the other schemas accept. ajv only reads <code>const</code> and <code>enum</code>,
+          and rejects <code>mapping</code>.
+        </p>
+        <p>
+          A <code>oneOf</code> without <code>discriminator</code> whose schemas give one property distinct string values
+          with <code>const</code> or <code>enum</code> is checked the same way: the result is the one of
+          <code>oneOf</code>, the errors of an object whose value picks a schema are the ones of that schema, and a value
+          that picks none gets the errors of <code>oneOf</code>.
+        </p>
+
+        <h3 id="formats">Formats</h3>
+        <p>
+          <code>format</code> is an annotation by default, as the drafts allow: nothing is checked. The option
+          <code>formats</code> turns the checks on:
+        </p>
+        <pre><code class="language-js">const validate = compileJsonSchema(
+  { type: 'object', properties: { email: { type: 'string', format: 'email' }, since: { format: 'date' } } },
+  { formats: true }
+);
+
+validate({ email: 'x', since: '2026-02-30' }); // ['email must be a valid email', 'since must be a valid date']</code></pre>
+        <ul>
+          <li>
+            <code>formats: true</code> checks every built-in format: <code>date</code>, <code>time</code>,
+            <code>date-time</code>, <code>duration</code>, <code>email</code>, <code>idn-email</code>,
+            <code>hostname</code>, <code>idn-hostname</code>, <code>ipv4</code>, <code>ipv6</code>, <code>uri</code>,
+            <code>uri-reference</code>, <code>iri</code>, <code>iri-reference</code>, <code>uuid</code>,
+            <code>uri-template</code>, <code>json-pointer</code>, <code>relative-json-pointer</code> and
+            <code>regex</code>.
+          </li>
+          <li><code>formats: ['email', 'date']</code> checks only those.</li>
+          <li>
+            <code>formats: { phone: /^\+\d+$/, even: (text) =&gt; text.length % 2 === 0, email: true }</code> adds
+            formats of your own, a regular expression or a function, and <code>true</code> picks a built-in one.
+          </li>
+        </ul>
+        <p>
+          A format applies to strings only, and one the option does not name is not checked. The built-in formats
+          follow their RFCs: dates and times with leap years and leap seconds (RFC 3339), email addresses with quoted
+          local parts and IP literals, and internationalized host names with punycode, IDNA2008 and the Bidi rule.
+          schiva passes every test of the optional format tests of the JSON-Schema-Test-Suite (793 of draft-07, 874 of
+          2019-09 and of 2020-12; <code>pnpm run conformance draft2020-12 --formats</code>); ajv with ajv-formats
+          passes 655 and 733.
+        </p>
+        <p>
+          <code>formatMinimum</code>, <code>formatMaximum</code>, <code>formatExclusiveMinimum</code> and
+          <code>formatExclusiveMaximum</code> limit the values of a format that can be compared (<code>date</code>,
+          <code>time</code> and <code>date-time</code>), as ajv-formats does, with the same results:
+        </p>
+        <pre><code class="language-js">const validate = compileJsonSchema(
+  { type: 'string', format: 'date', formatMinimum: '2020-01-01', formatExclusiveMaximum: '2021-01-01' },
+  { formats: true }
+);
+
+validate('2019-12-31'); // ['Value must be at least 2020-01-01']</code></pre>
+        <p>
+          Times and date-times compare by the moment they name, whatever their time zone. As in ajv the limits need
+          <code>format</code>, and are checked only when the format is. A format of your own can be compared too, given
+          as <code>{ validate, compare }</code> in <code>formats</code>, where <code>compare(a, b)</code> gives a
+          negative number, 0 or a positive number. Where ajv ignores a limit that is not a valid value of its format,
+          schiva throws.
+        </p>
+        <p>In the DSL, a <code>String</code> takes a built-in format too: <code>String({ format: 'email' })</code>.</p>
 
         <h3 id="drafts">Drafts</h3>
         <p>
-          The draft comes from <code>options.draft</code> (<code>'draft-07'</code>, <code>'2019-09'</code> or
-          <code>'2020-12'</code>), or else from the <code>$schema</code> of the schema. Without either, or with another
-          <code>$schema</code> (such as draft-04 or draft-06), the schema is read as draft-07.
+          The draft comes from <code>options.draft</code> (<code>'draft-04'</code>, <code>'draft-06'</code>,
+          <code>'draft-07'</code>, <code>'2019-09'</code> or <code>'2020-12'</code>), or else from the
+          <code>$schema</code> of the schema. Without either, or with another <code>$schema</code>, the schema is read
+          as draft-07. Each schema resource
+          inside it, or document it references, is read in the draft its own <code>$schema</code> names, so a 2020-12
+          schema can reference draft-07 ones. A <code>$schema</code> can also name a meta-schema given in
+          <code>options.schemas</code>: its draft applies, and the keywords of the vocabularies its
+          <code>$vocabulary</code> leaves out are ignored.
         </p>
         <pre><code class="language-js">const validate = compileJsonSchema({
   $schema: 'https://json-schema.org/draft/2020-12/schema',
@@ -317,6 +572,12 @@ node.compile()({ value: 1, children: [{ value: 2, children: [{ value: 'x' }] }] 
 
 validate(['a', 1]); // []
 validate(['a', 1, 2]); // ['Value[2] is not allowed']</code></pre>
+        <p>
+          The older drafts differ from draft-07 in a few keywords. Draft-06 has no <code>if</code>/<code>then</code>/<code>else</code>.
+          Draft-04 has no <code>const</code>, <code>contains</code> or <code>propertyNames</code> either, changes the
+          base URI with <code>id</code> instead of <code>$id</code>, and makes <code>exclusiveMinimum</code> and
+          <code>exclusiveMaximum</code> booleans that make <code>minimum</code> and <code>maximum</code> exclusive.
+        </p>
         <p>Drafts 2019-09 and 2020-12 add, and schiva supports:</p>
         <ul>
           <li><code>$defs</code> and <code>$anchor</code> (and <code>$dynamicAnchor</code> as a plain anchor for <code>$ref</code>).</li>
@@ -344,33 +605,71 @@ validate(['a', 1, 2]); // ['Value[2] is not allowed']</code></pre>
 });
 
 validate({ id: 1, name: 'a' }); // []
-validate({ id: 1, name: 'a', extra: true }); // ['Unexpected key: Value.extra']</code></pre>
+validate({ id: 1, name: 'a', extra: true }); // ['Unexpected key: extra']</code></pre>
         <p>
           When the keys those keywords evaluate are the same for every value, as with <code>$ref</code>,
           <code>allOf</code> and <code>properties</code>, the check compiles to a loop over the other keys, as fast as
           <code>additionalProperties</code>. With <code>anyOf</code>, <code>oneOf</code>, <code>if</code> or
           <code>dependentSchemas</code> it depends on the value, and the generated code works it out first.
         </p>
+        <h3 id="dynamic-references">Dynamic references</h3>
+        <p>
+          <code>$dynamicRef</code> (2020-12) and <code>$recursiveRef</code> (2019-09) let a schema extend another that
+          refers to itself: the reference points to the outermost schema being evaluated that has the same
+          <code>$dynamicAnchor</code> (or <code>$recursiveAnchor</code>). Here a generic tree accepts any key, and the
+          strict tree that extends it rejects unknown keys at every level:
+        </p>
+        <pre><code class="language-js">const tree = {
+  $schema: 'https://json-schema.org/draft/2020-12/schema',
+  $id: 'https://example.com/tree',
+  $dynamicAnchor: 'node',
+  type: 'object',
+  properties: { data: true, children: { type: 'array', items: { $dynamicRef: '#node' } } },
+};
+const validate = compileJsonSchema(
+  {
+    $schema: 'https://json-schema.org/draft/2020-12/schema',
+    $id: 'https://example.com/strict-tree',
+    $dynamicAnchor: 'node',
+    $ref: 'tree',
+    unevaluatedProperties: false,
+  },
+  { schemas: [tree] }
+);
+
+validate({ children: [{ daat: 1 }] }); // ['Unexpected key: children[0].daat']</code></pre>
+        <p>
+          The target of a dynamic reference depends on the schemas being evaluated, and schiva still works it out when
+          compiling: a schema reached in different ways is compiled once for each, so the generated code stays as fast
+          as for <code>$ref</code>.
+        </p>
         <div class="callout">
           <p>
-            <strong>Not supported yet:</strong> <code>$recursiveRef</code> and <code>$dynamicRef</code>. They throw
-            when compiling, as does referencing the 2019-09 or 2020-12 meta-schemas, which use them.
+            <strong>Complete:</strong> schiva passes the whole JSON-Schema-Test-Suite of draft-04 (618 of 618),
+            draft-06 (841 of 841), draft-07 (929 of 929), 2019-09 (1261 of 1261) and 2020-12 (1301 of 1301).
+            <code>pnpm run conformance draft2020-12</code> shows it file by file.
           </p>
         </div>
-        <p>
-          Measured with the JSON-Schema-Test-Suite, schiva passes 1218 of 1261 tests of 2019-09 and 1250 of 1301 of
-          2020-12 (ajv: 1233 and 1239); the tests it does not pass use those keywords, and one needs a custom
-          meta-schema that turns validation off.
-        </p>
 
         <h3 id="documents">Several documents</h3>
         <p>
           References to other documents resolve against the documents given in <code>options.schemas</code>, as
-          <code>{ uri: schema }</code> or as an array of schemas with <code>$id</code>. Nothing is loaded from the
-          network, and a reference that cannot be resolved throws when compiling:
+          <code>{ uri: schema }</code> or as an array of schemas with <code>$id</code>.
+          <code>compileJsonSchema()</code> loads nothing, and a reference that cannot be resolved throws when
+          compiling:
         </p>
         <pre><code class="language-js">const validateOrder = compileJsonSchema(orderSchema, {
   schemas: { 'https://example.com/schemas/address.json': addressSchema },
+});</code></pre>
+        <p>
+          To load them instead, <code>compileJsonSchemaAsync(json, options)</code> asks
+          <code>options.loadSchema(uri)</code>, an async function you write, for each document the schema references
+          and <code>schemas</code> does not have, and for the ones those reference in turn, once each (like ajv's
+          <code>compileAsync()</code>). <code>loadJsonSchemas(json, options)</code> gives the documents it loaded, with
+          <code>options.schemas</code>, to compile later or to write <a href="#standalone">standalone code</a>:
+        </p>
+        <pre><code class="language-js">const validateOrder = await compileJsonSchemaAsync(orderSchema, {
+  loadSchema: async (uri) =&gt; (await fetch(uri)).json(),
 });</code></pre>
         <p>
           To validate schemas against the draft-07 meta-schema, register it in <code>schemas</code> (ajv ships a copy
@@ -387,7 +686,89 @@ validate({ id: 1, name: 'a', extra: true }); // ['Unexpected key: Value.extra']<
 ]</code></pre>
         <p>
           A value checked on its own (not inside a schema) is called <code>Value</code>:
-          <code>Integer().compile()('x')</code> returns <code>['Value must be a number']</code>.
+          <code>Integer().compile()('x')</code> returns <code>['Value must be a number']</code>. Keys are named the
+          same way whether or not the schema combines keywords (<code>allOf</code>, <code>$ref</code> with other
+          keywords, <code>unevaluatedProperties</code>...): <code>name</code>, not <code>Value.name</code>.
+        </p>
+        <p>
+          With every error (the default mode), the errors of every part of a schema are reported, including every
+          schema of an <code>allOf</code>, and each message appears once even when two parts find the same problem.
+        </p>
+
+        <h3 id="error-objects">Error objects</h3>
+        <p>
+          With <code>errors: 'objects'</code>, the compiled function returns each error as an object, for code that
+          handles them (showing them next to form fields, translating them, or <a href="migrating-from-ajv.html">moving from ajv</a>):
+        </p>
+        <pre><code class="language-js">order.compile({ errors: 'objects' })({ id: 1, lines: [{ price: -1 }] });
+// [
+//   { path: ['id'], pointer: '/id', keyword: 'type', params: { type: 'string' }, message: 'id must be a string' },
+//   { path: ['lines', 0, 'price'], pointer: '/lines/0/price', keyword: 'minimum', params: { limit: 0 },
+//     message: 'lines[0].price must be at least 0' },
+// ]</code></pre>
+        <ul>
+          <li>
+            <code>path</code>: the keys and indexes of the value, <code>[]</code> for the value itself;
+            <code>pointer</code> is the same path as a JSON Pointer.
+          </li>
+          <li>
+            <code>keyword</code>: the check that failed, with the name of the JSON Schema keyword: <code>type</code>,
+            <code>required</code> (missing), <code>nullable</code> (<code>null</code> not allowed),
+            <code>minimum</code>, <code>maximum</code>, <code>exclusiveMinimum</code>, <code>exclusiveMaximum</code>,
+            <code>multipleOf</code>, <code>minLength</code>, <code>maxLength</code>, <code>pattern</code>,
+            <code>format</code>, <code>enum</code>, <code>const</code>, <code>minItems</code>, <code>maxItems</code>,
+            <code>uniqueItems</code>, <code>contains</code>, <code>minContains</code>, <code>maxContains</code>,
+            <code>minProperties</code>, <code>maxProperties</code>, <code>additionalProperties</code> and
+            <code>unevaluatedProperties</code> (an unexpected key, whose path it is), <code>dependentRequired</code>
+            (at the path of the missing property), <code>not</code>, <code>oneOf</code>, <code>false</code> (a value
+            no schema allows) and <code>custom</code> (a <a href="#custom-types">type of your own</a>).
+          </li>
+          <li>
+            <code>params</code>: its details, such as <code>{ limit: 0 }</code>, <code>{ allowedValues: [...] }</code>,
+            <code>{ property: 'extra' }</code> or <code>{ format: 'email' }</code>; <code>{}</code> when there are none.
+          </li>
+          <li>
+            <code>message</code>: the same message as with the default mode. An error of <code>propertyNames</code>
+            also has <code>propertyName: true</code>.
+          </li>
+        </ul>
+        <p>
+          It works with <code>compileJsonSchema()</code> and in <a href="#standalone">standalone code</a> too;
+          <code>validate()</code> still gives messages.
+        </p>
+
+        <h2 id="typescript">TypeScript</h2>
+        <p>
+          schiva includes its type declarations. <code>Infer</code> gives the TypeScript type of the values a DSL
+          schema accepts, and a function compiled with <code>{ errors: false }</code> is a type guard:
+        </p>
+        <pre><code class="language-ts">import { Schema, String, Integer, ArrayOf, Enum, Infer } from 'schiva';
+
+const person = new Schema({
+  id: String(),
+  age: Integer({ min: 18 }),
+  status: Enum({ options: ['active', 'blocked'] }),
+  tags: ArrayOf({ type: String(), isMandatory: false }),
+  address: { city: String(), zip: String({ isNullable: true }) },
+});
+
+type Person = Infer&lt;typeof person&gt;;
+// { id: string; age: number; status: 'active' | 'blocked'; address: { city: string; zip: string | null };
+//   tags?: string[] | undefined }
+
+const isPerson = person.compile({ errors: false });
+if (isPerson(body)) {
+  body.address.city; // body is a Person here
+}</code></pre>
+        <p>
+          A key whose type accepts <code>undefined</code> (<code>isMandatory: false</code>, <code>.optional()</code>)
+          is an optional property, and <code>isNullable</code> adds <code>null</code>. <code>ArrayOf</code> gives
+          arrays and tuples, <code>AnyOf</code> and <code>OneOf</code> unions, and <code>AllOf</code> intersections. A
+          recursive schema needs the type of its <code>Ref</code>: <code>const child = Ref&lt;TreeNode&gt;()</code>.
+        </p>
+        <p>
+          The values a JSON Schema accepts are <code>unknown</code> to TypeScript; give their type to get a type guard:
+          <code>compileJsonSchema&lt;User&gt;(schema, { errors: false })</code>.
         </p>
 
         <h2 id="custom-types">Types of your own</h2>
@@ -420,7 +801,10 @@ new Schema({ n: new Even() }).compile()({ n: 3 }); // ['n must be even']</code><
               <tr><td><code>type.compile(options)</code></td><td>a validation function; see <a href="#modes">Modes</a></td></tr>
               <tr><td><code>type.validate(value)</code></td><td>the errors, without compiling</td></tr>
               <tr><td><code>type.isValid(value)</code></td><td><code>true</code> or <code>false</code>, without compiling</td></tr>
-              <tr><td><code>compileJsonSchema(json, options)</code></td><td>a validation function for a JSON Schema; takes the options of <code>compile</code> and <code>schemas</code></td></tr>
+              <tr><td><code>compileJsonSchema(json, options)</code></td><td>a validation function for a JSON Schema; takes the options of <code>compile</code>, and <code>schemas</code>, <code>draft</code>, <code>formats</code>, <code>strict</code>, <code>keywords</code>, <code>useDefaults</code>, <code>removeAdditional</code> and <code>coerceTypes</code></td></tr>
+              <tr><td><code>ajvKeywords(names)</code></td><td>definitions of the keywords of ajv-keywords, for the option <code>keywords</code> (see <a href="#keywords">Keywords of your own</a>)</td></tr>
+              <tr><td><code>compileJsonSchemaAsync(json, options)</code></td><td>a promise of the same, loading the documents it references with <code>options.loadSchema</code> (see <a href="#documents">Several documents</a>)</td></tr>
+              <tr><td><code>loadJsonSchemas(json, options)</code></td><td>a promise of the documents a schema references, loaded with <code>options.loadSchema</code></td></tr>
               <tr><td><code>fromJsonSchema(json, options)</code></td><td>the schiva type of a JSON Schema</td></tr>
             </tbody>
           </table>
@@ -452,9 +836,10 @@ new Schema({ n: new Even() }).compile()({ n: 3 }); // ['n must be even']</code><
             outside.
           </li>
           <li>
-            <strong>Content Security Policy.</strong> The generated code is created with <code>new Function</code>,
-            which needs <code>'unsafe-eval'</code> in the <code>script-src</code> of a Content Security Policy. Where
-            that is not allowed, use <code>validate()</code> and <code>isValid()</code>, which do not generate code.
+            <strong>Content Security Policy.</strong> <code>compile()</code> creates the function with
+            <code>new Function</code>, which needs <code>'unsafe-eval'</code> in the <code>script-src</code> of a
+            Content Security Policy. Where that is not allowed, generate <a href="#standalone">standalone code</a> when
+            building, which runs without it.
           </li>
           <li><strong>Circular data.</strong> Values that contain themselves (<code>a.self = a</code>) are not supported.</li>
         </ul>
@@ -481,22 +866,22 @@ new Schema({ n: new Even() }).compile()({ n: 3 }); // ['n must be even']</code><
               <tr><th></th><th>draft-07</th><th>2019-09</th><th>2020-12</th></tr>
             </thead>
             <tbody>
-              <tr><td>schiva, first error</td><td><strong>114k</strong></td><td><strong>21.8k</strong></td><td><strong>21.4k</strong></td></tr>
-              <tr><td>ajv, first error</td><td>61k</td><td>5k–15k ¹</td><td>5k–15k ¹</td></tr>
-              <tr><td>@exodus/schemasafe, first error</td><td>103k</td><td>18.0k</td><td>16.2k</td></tr>
-              <tr><td>schiva, all errors</td><td><strong>89k</strong></td><td><strong>16.7k</strong></td><td><strong>17.6k</strong></td></tr>
-              <tr><td>ajv, all errors</td><td>54k</td><td>5k–12k ¹</td><td>5k–12k ¹</td></tr>
-              <tr><td>@exodus/schemasafe, all errors</td><td>68k</td><td>10.4k</td><td>9.4k</td></tr>
-              <tr><td>schiva, true/false</td><td><strong>172k</strong></td><td><strong>32.1k</strong></td><td><strong>31.1k</strong></td></tr>
-              <tr><td>@exodus/schemasafe, true/false</td><td>152k</td><td>28.3k</td><td>27.1k</td></tr>
-              <tr><td>Tests passed: schiva / ajv / schemasafe</td><td><strong>929</strong> / 921 / 905</td><td>1218 / 1233 / 1228</td><td>1250 / 1239 / 1263</td></tr>
+              <tr><td>schiva, first error</td><td><strong>124k</strong></td><td><strong>22.1k</strong></td><td><strong>25.7k</strong></td></tr>
+              <tr><td>ajv, first error</td><td>60k</td><td>4k–15k ¹</td><td>5k–15k ¹</td></tr>
+              <tr><td>@exodus/schemasafe, first error</td><td>98k</td><td>14.9k</td><td>17.1k</td></tr>
+              <tr><td>schiva, all errors</td><td><strong>101k</strong></td><td><strong>17.1k</strong></td><td><strong>19.4k</strong></td></tr>
+              <tr><td>ajv, all errors</td><td>51k</td><td>3.6k–12k ¹</td><td>5k–12k ¹</td></tr>
+              <tr><td>@exodus/schemasafe, all errors</td><td>64k</td><td>6.9k</td><td>9.7k</td></tr>
+              <tr><td>schiva, true/false</td><td><strong>177k</strong></td><td><strong>30.9k</strong></td><td><strong>34.7k</strong></td></tr>
+              <tr><td>@exodus/schemasafe, true/false</td><td>147k</td><td>24.0k</td><td>27.5k</td></tr>
+              <tr><td>Tests passed: schiva / ajv / schemasafe</td><td><strong>929</strong> / 921 / 905</td><td><strong>1261</strong> / 1233 / 1228</td><td><strong>1301</strong> / 1239 / 1263</td></tr>
             </tbody>
           </table>
         </div>
         <p>
-          ¹ ajv's speed on these two suites changes from one process to the next, between the two numbers given. On
-          drafts 2019-09 and 2020-12, json-schema-library passes the most tests (1260 and 1291), at about 1/400 of the
-          speed of schiva; the tests schiva misses use dynamic references.
+          ¹ ajv's speed on these two suites changes from one process to the next, between the two numbers given.
+          schiva passes every test of the three suites. Of the other validators, the one that passes the most tests of
+          drafts 2019-09 and 2020-12 is json-schema-library (1260 and 1291), at about 1/400 of the speed of schiva.
         </p>
         <h3 id="performance-payloads">Payloads</h3>
         <p>Validations per second (compiling: schemas per second).</p>
@@ -506,15 +891,17 @@ new Schema({ n: new Even() }).compile()({ n: 3 }); // ['n must be even']</code><
               <tr><th></th><th>schiva, first error</th><th>ajv, first error</th><th>schiva, all errors</th><th>ajv, all errors</th></tr>
             </thead>
             <tbody>
-              <tr><td>moltar strict, valid</td><td><strong>32.8M</strong></td><td>28.6M</td><td><strong>30.9M</strong></td><td>29.4M</td></tr>
-              <tr><td>moltar strict, invalid</td><td><strong>75.2M</strong></td><td>34.4M</td><td><strong>20.1M</strong></td><td>17.0M</td></tr>
-              <tr><td>Order with 20 lines, valid</td><td><strong>2.23M</strong></td><td>0.75M</td><td><strong>2.23M</strong></td><td>0.72M</td></tr>
-              <tr><td>Order with 20 lines, invalid</td><td><strong>16.9M</strong></td><td>12.2M</td><td><strong>1.94M</strong></td><td>0.44M</td></tr>
-              <tr><td>Order 2020-12 (<code>$ref</code>, <code>allOf</code>, <code>unevaluatedProperties</code>), valid</td><td><strong>2.33M</strong></td><td>0.66M</td><td><strong>2.18M</strong></td><td>0.65M</td></tr>
-              <tr><td>Order 2020-12, invalid</td><td><strong>29.3M</strong></td><td>15.0M</td><td><strong>1.82M</strong></td><td>0.38M</td></tr>
-              <tr><td>Payment 2020-12 (<code>oneOf</code> and <code>unevaluatedProperties</code>), valid</td><td><strong>16.1M</strong></td><td>9.2M</td><td><strong>15.2M</strong></td><td>8.1M</td></tr>
-              <tr><td>Payment 2020-12, invalid</td><td><strong>13.5M</strong></td><td>7.8M</td><td><strong>11.2M</strong></td><td>6.5M</td></tr>
-              <tr><td>Compiling the order schema</td><td><strong>9.3k</strong></td><td>0.19k</td><td><strong>8.9k</strong></td><td>0.22k</td></tr>
+              <tr><td>moltar strict, valid</td><td><strong>33.1M</strong></td><td>29.1M</td><td><strong>30.6M</strong></td><td>27.9M</td></tr>
+              <tr><td>moltar strict, invalid</td><td><strong>78.9M</strong></td><td>36.0M</td><td><strong>20.8M</strong></td><td>17.5M</td></tr>
+              <tr><td>Order with 20 lines, valid</td><td><strong>2.16M</strong></td><td>0.74M</td><td><strong>2.23M</strong></td><td>0.71M</td></tr>
+              <tr><td>Order with 20 lines, invalid</td><td><strong>17.1M</strong></td><td>12.2M</td><td><strong>1.86M</strong></td><td>0.44M</td></tr>
+              <tr><td>Order 2020-12 (<code>$ref</code>, <code>allOf</code>, <code>unevaluatedProperties</code>), valid</td><td><strong>2.32M</strong></td><td>0.66M</td><td><strong>2.29M</strong></td><td>0.65M</td></tr>
+              <tr><td>Order 2020-12, invalid</td><td><strong>31.7M</strong></td><td>15.0M</td><td><strong>1.53M</strong></td><td>0.38M</td></tr>
+              <tr><td>Payment 2020-12 (<code>oneOf</code> and <code>unevaluatedProperties</code>), valid</td><td><strong>15.2M</strong></td><td>8.8M</td><td><strong>15.3M</strong></td><td>8.0M</td></tr>
+              <tr><td>Payment 2020-12, invalid</td><td><strong>14.5M</strong></td><td>7.5M</td><td><strong>13.8M</strong></td><td>6.2M</td></tr>
+              <tr><td>Shapes, <code>discriminator</code> with 8 kinds, valid</td><td><strong>117M</strong></td><td>44.8M</td><td><strong>105M</strong></td><td>44.7M</td></tr>
+              <tr><td>Shapes, invalid</td><td><strong>122M</strong></td><td>37.1M</td><td><strong>44.3M</strong></td><td>19.7M</td></tr>
+              <tr><td>Compiling the order schema</td><td><strong>8.4k</strong></td><td>0.19k</td><td><strong>8.3k</strong></td><td>0.23k</td></tr>
             </tbody>
           </table>
         </div>
@@ -529,21 +916,38 @@ pnpm run conformance   # tests passed by schiva and ajv, file by file, for one d
         </p>
 
         <h2 id="faq">FAQ</h2>
-        <h3 id="faq-strings">Why are errors strings and not objects?</h3>
+        <h3 id="faq-strings">Why are errors strings by default?</h3>
         <p>
           Most errors end up in a log or an HTTP response. Strings with the path in front are ready for that, and
-          building them is cheap. If you only need to know whether a value is valid, use
+          building them is cheap. For errors handled by code, use <code>{ errors: 'objects' }</code> (see
+          <a href="#error-objects">Error objects</a>); to know only whether a value is valid,
           <code>{ errors: false }</code>.
         </p>
-        <h3 id="faq-drafts">Does it support draft 2019-09 or 2020-12?</h3>
+        <h3 id="faq-ajv">How do I move from ajv?</h3>
         <p>
-          Almost: everything but dynamic references (<code>$recursiveRef</code>, <code>$dynamicRef</code>), which
-          throw when compiling. See <a href="#drafts">Drafts</a>.
+          Your JSON Schemas stay as they are; the code around them changes a little. See
+          <a href="migrating-from-ajv.html">Migrating from ajv</a>.
+        </p>
+        <h3 id="faq-drafts">Which drafts does it support?</h3>
+        <p>
+          Draft-04, draft-06, draft-07, 2019-09 and 2020-12, completely: schiva passes their whole
+          JSON-Schema-Test-Suite, dynamic references and vocabularies included. See <a href="#drafts">Drafts</a>.
+        </p>
+        <h3 id="faq-openapi">Does it work with OpenAPI schemas?</h3>
+        <p>
+          Yes: <code>nullable</code> and <code>discriminator</code> are supported, and the <code>x-</code> keywords can
+          be declared with the option <code>keywords</code> (see <a href="#strict">Unknown keywords</a> and
+          <a href="#discriminator">Discriminator</a>).
         </p>
         <h3 id="faq-format">Does it check <code>format</code>?</h3>
-        <p>No, see <a href="#strict">Unknown keywords throw</a>.</p>
+        <p>
+          When you ask it to, with the option <code>formats</code> (or <code>String({ format })</code> in the DSL): see
+          <a href="#formats">Formats</a>.
+        </p>
         <h3 id="faq-ts">Does it include TypeScript types?</h3>
-        <p>Not yet.</p>
+        <p>
+          Yes, and it infers the type of the values a DSL schema accepts: see <a href="#typescript">TypeScript</a>.
+        </p>
       </article>
     </div>
 

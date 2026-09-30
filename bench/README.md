@@ -14,7 +14,9 @@ pnpm run object          # realistic payloads only, isolated
 pnpm run quick           # both benchmarks, every validator in one process (about a minute)
 pnpm run quick:suite
 pnpm run quick:object
-pnpm run conformance draft2020-12   # schiva and ajv on the suite of one draft, file by file
+pnpm run conformance draft2020-12   # schiva and ajv on the suite of one draft (draft4, draft6, draft7, draft2019-09, draft2020-12)
+pnpm run conformance draft2020-12 --standalone   # the same, with schiva running standalone code without code generation
+pnpm run conformance draft2020-12 --formats      # the optional tests of format, with formats checked (ajv: ajv-formats)
 ```
 
 Raw numbers are written to `bench/results/` (git-ignored): `suite.json` and `object.json` for the isolated mode,
@@ -40,7 +42,11 @@ Raw numbers are written to `bench/results/` (git-ignored): `suite.json` and `obj
 - **Payloads** (`lib/cases.js`): validates the same schema with every validator.
   - **moltar**: the flat object from typescript-runtime-type-benchmarks, with no extra keys allowed.
   - **order**: a business-style object with 20 order lines, using `pattern`, `enum`, `const`, number ranges,
-    `anyOf`, nullable types and `uniqueItems`.
+    `anyOf`, nullable types and `uniqueItems`; also in draft 2020-12 with `$ref`, `allOf` and
+    `unevaluatedProperties`.
+  - **payment** (2020-12): `oneOf` variants with `unevaluatedProperties`.
+  - **shapes**: 8 variants picked by an OpenAPI `discriminator` (ajv with its option `discriminator: true`, the
+    validators without it through `oneOf`).
 
   Each payload is run valid and invalid. It also measures compile cost (schema to validator). A validator that
   fails to compile a schema, or gives the wrong answer for it, is skipped for that case.

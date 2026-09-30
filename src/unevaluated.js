@@ -18,6 +18,7 @@ const {
   WhenType,
   isJsonType,
 } = require('./types');
+const { NO_TYPE, EVERY_TYPE } = require('./types/one-of');
 
 // What a type evaluated: true for everything, or a Set of keys (or of element indexes).
 const ALL = true;
@@ -161,6 +162,12 @@ evaluated = (kind, type, value, seen = []) => {
         seen
       );
     case OneOfType: {
+      // With a discriminator, the type it picks, when the value satisfies it.
+      const picked = type.pick(value);
+      if (picked !== EVERY_TYPE) {
+        const isPicked = picked !== NO_TYPE && type.types[picked].isValid(value);
+        return isPicked ? evaluated(kind, type.types[picked], value, seen) : new Set();
+      }
       const valid = type.types.filter((item) => item.isValid(value));
       return valid.length === 1 ? evaluated(kind, valid[0], value, seen) : new Set();
     }

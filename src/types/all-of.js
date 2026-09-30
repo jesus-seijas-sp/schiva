@@ -7,17 +7,19 @@ class AllOfType extends ValidateType {
     this.types = toTypes(options.types, 'AllOf types') || [];
   }
 
-  validate(value, fieldName = 'Value') {
-    const result = super.validate(value, fieldName);
+  // The errors of every type the value fails. The field name goes to them as received: undefined for the value
+  // itself, so a Schema names its keys as it does on its own.
+  validate(value, fieldName = undefined) {
+    const result = super.validate(value, fieldName || 'Value');
     if (result) {
       return result;
     }
     if (value !== undefined && value !== null) {
-      for (let i = 0; i < this.types.length; i += 1) {
-        if (!this.types[i].isValid(value)) {
-          return this.types[i].errors(value, fieldName);
-        }
+      const errors = this.types.filter((type) => !type.isValid(value)).map((type) => type.errors(value, fieldName));
+      if (errors.length <= 1) {
+        return errors[0];
       }
+      return errors.flat(Infinity);
     }
     return undefined;
   }

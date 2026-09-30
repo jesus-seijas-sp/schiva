@@ -1,5 +1,15 @@
 const { hasFewerCodePoints, hasMoreCodePoints } = require('./code-point-length');
 const { ValidateType } = require('./validate-type');
+const { FORMATS, matchesFormat } = require('../formats');
+
+// The limits of a format: how a comparison fails them (a comparison that is undefined never does), the text of their
+// error, and their comparison in ajv's params.
+const FORMAT_LIMITS = {
+  formatMinimum: { fails: (result) => result < 0, text: 'at least', comparison: '>=' },
+  formatMaximum: { fails: (result) => result > 0, text: 'at most', comparison: '<=' },
+  formatExclusiveMinimum: { fails: (result) => result <= 0, text: 'greater than', comparison: '>' },
+  formatExclusiveMaximum: { fails: (result) => result >= 0, text: 'less than', comparison: '<' },
+};
 
 class StringType extends ValidateType {
   constructor(options = {}) {
@@ -10,6 +20,28 @@ class StringType extends ValidateType {
     this.allowEmpty = options.allowEmpty;
     // Count min/max in Unicode code points (as JSON Schema does) instead of UTF-16 units.
     this.countCodePoints = options.countCodePoints;
+    // A format the string must have: the name of a built-in one (formats.js), or with `formatCheck` (a function or a
+    // regular expression) one of the JSON Schema option "formats".
+    this.format = options.format;
+    this.formatCheck = options.formatCheck;
+    if (this.format !== undefined && this.formatCheck === undefined) {
+      if (!Object.prototype.hasOwnProperty.call(FORMATS, this.format)) {
+        throw new Error(`Unknown String format "${this.format}": use one of ${Object.keys(FORMATS).join(', ')}`);
+      }
+      this.formatCheck = FORMATS[this.format];
+    }
+    // [{ keyword, limit, compare }]: limits of the value of the format (formatMinimum, formatMaximum,
+    // formatExclusiveMinimum and formatExclusiveMaximum), checked with compare(value, limit) after the format.
+    this.formatLimits = options.formatLimits || [];
+  }
+
+  // The first limit of the format the value does not satisfy, or undefined.
+  failedLimit(value) {
+    return this.formatLimits.find(({ keyword, limit, compare }) => FORMAT_LIMITS[keyword].fails(compare(value, limit)));
+  }
+
+  hasFormat(value) {
+    return this.formatCheck === undefined || matchesFormat(this.formatCheck, value);
   }
 
   isTooShort(value) {
@@ -39,6 +71,13 @@ class StringType extends ValidateType {
       if (this.pattern && !this.pattern.test(value)) {
         return `${fieldName} does not match the required pattern`;
       }
+      if (!this.hasFormat(value)) {
+        return `${fieldName} must be a valid ${this.format}`;
+      }
+      const failed = this.failedLimit(value);
+      if (failed) {
+        return `${fieldName} must be ${FORMAT_LIMITS[failed.keyword].text} ${failed.limit}`;
+      }
     }
     return undefined;
   }
@@ -55,7 +94,9 @@ class StringType extends ValidateType {
     return (
       (this.min === undefined || skipMin || !this.isTooShort(value)) &&
       (this.max === undefined || !this.isTooLong(value)) &&
-      (!this.pattern || this.pattern.test(value))
+      (!this.pattern || this.pattern.test(value)) &&
+      this.hasFormat(value) &&
+      this.failedLimit(value) === undefined
     );
   }
 }
@@ -79,6 +120,7 @@ function ostr(min, max, isMandatory = false, isNullable = false) {
 }
 
 module.exports = {
+  FORMAT_LIMITS,
   StringType,
   String,
   str,

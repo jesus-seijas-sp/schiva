@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Migrating from ajv &middot; schiva</title>
+    <meta
+      name="description"
+      content="How to move from ajv to schiva: the same JSON Schema, the API, options, error objects, formats, several documents, standalone code, TypeScript, and what schiva does not do."
+    />
+    <link rel="canonical" href="https://schiva.js.org/migrating-from-ajv.html" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230d7c66'/%3E%3Ctext x='16' y='22.5' font-family='monospace' font-size='18' font-weight='700' fill='white' text-anchor='middle'%3Es%3C/text%3E%3C/svg%3E"
+    />
+    <link rel="stylesheet" href="style.css" />
+    <script src="main.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+  </head>
+  <body>
+    <header class="header">
+      <div class="header-inner">
+        <a class="logo" href="./"><span class="logo-mark">s</span>schiva</a>
+        <nav class="nav">
+          <a href="guide.html">Guide</a>
+          <a href="migrating-from-ajv.html" aria-current="page" class="hide-small">From ajv</a>
+          <a href="https://github.com/jesus-seijas-sp/schiva">GitHub</a>
+          <a class="hide-small" href="https://www.npmjs.com/package/schiva">npm</a>
+          <button class="theme-toggle" type="button" aria-label="Switch between light and dark theme">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />
+            </svg>
+          </button>
+        </nav>
+      </div>
+    </header>
+
+    <div class="docs">
+      <button class="menu-toggle" type="button" aria-expanded="false">&#9776; Contents</button>
+      <aside class="sidebar">
+        <h4>Migrating from ajv</h4>
+        <ul>
+          <li><a href="#overview">Overview</a></li>
+          <li><a href="#side-by-side">Side by side</a></li>
+          <li><a href="#api">API</a></li>
+          <li><a href="#options">Options</a></li>
+          <li><a href="#errors">Errors</a></li>
+          <li><a href="#formats">Formats</a></li>
+          <li><a href="#documents">Several documents</a></li>
+          <li><a href="#standalone">Standalone code</a></li>
+          <li><a href="#typescript">TypeScript</a></li>
+          <li><a href="#not-supported">What schiva does not do</a></li>
+          <li><a href="#checklist">Checklist</a></li>
+        </ul>
+        <h4>More</h4>
+        <ul>
+          <li><a href="guide.html">Guide</a></li>
+          <li><a href="guide.html#performance">Performance</a></li>
+        </ul>
+      </aside>
+
+      <article class="content">
+        <h1>Migrating from ajv</h1>
+        <p class="intro">
+          Your JSON Schemas stay as they are: schiva reads draft-04, draft-06, draft-07, 2019-09 and 2020-12, and
+          passes the whole JSON-Schema-Test-Suite of each. What changes is the code around them, and this page goes through it.
+        </p>
+
+        <h2 id="overview">Overview</h2>
+        <ul>
+          <li>
+            <strong>No instance.</strong> ajv compiles through an <code>Ajv</code> object that holds options, formats
+            and schemas. schiva compiles with a function, <code>compileJsonSchema(schema, options)</code>, and the
+            options go with each call.
+          </li>
+          <li>
+            <strong>Errors are returned.</strong> An ajv function returns <code>true</code> or <code>false</code> and
+            leaves the errors in <code>validate.errors</code>. A schiva function returns the errors: messages by
+            default, objects with <code>errors: 'objects'</code>, or <code>true</code>/<code>false</code> with
+            <code>errors: false</code>. Nothing is kept between calls.
+          </li>
+          <li>
+            <strong>Every error by default.</strong> ajv stops at the first error unless <code>allErrors: true</code>.
+            schiva reports every error unless <code>allErrors: false</code>.
+          </li>
+          <li>
+            <strong>Strict.</strong> An unknown keyword throws when compiling, as in ajv's strict mode. Declare your
+            own annotations with <code>keywords</code>, or ignore unknown keywords with <code>strict: false</code>.
+          </li>
+          <li>
+            <strong>The data is not changed</strong> unless you ask: <code>useDefaults</code> and
+            <code>removeAdditional</code> and <code>coerceTypes</code> work as in ajv.
+          </li>
+        </ul>
+
+        <h2 id="side-by-side">Side by side</h2>
+        <div class="tabs">
+          <div class="tab-list" role="tablist">
+            <button role="tab" id="tab-ajv" aria-controls="panel-ajv" aria-selected="true">ajv</button>
+            <button role="tab" id="tab-schiva" aria-controls="panel-schiva" aria-selected="false">schiva</button>
+          </div>
+          <div class="tab-panel" id="panel-ajv" role="tabpanel" aria-labelledby="tab-ajv">
+            <pre><code class="language-js">const Ajv2020 = require('ajv/dist/2020');
+const addFormats = require('ajv-formats');
+
+const ajv = new Ajv2020({ allErrors: true });
+addFormats(ajv);
+ajv.addSchema(addressSchema, 'https://example.com/address.json');
+
+const validate = ajv.compile(orderSchema);
+if (!validate(order)) {
+  console.log(validate.errors);
+}</code></pre>
+          </div>
+          <div class="tab-panel" id="panel-schiva" role="tabpanel" aria-labelledby="tab-schiva" hidden>
+            <pre><code class="language-js">const { compileJsonSchema } = require('schiva');
+
+// The draft comes from "$schema" (or the option draft: '2020-12').
+const validate = compileJsonSchema(orderSchema, {
+  formats: true,
+  schemas: { 'https://example.com/address.json': addressSchema },
+  errors: 'objects', // or leave it out for messages
+});
+
+const errors = validate(order);
+if (errors.length > 0) {
+  console.log(errors);
+}</code></pre>
+          </div>
+        </div>
+
+        <h2 id="api">API</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>ajv</th><th>schiva</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>new Ajv()</code>, <code>Ajv2019</code>, <code>Ajv2020</code>, ajv-draft-04</td><td>no instance; the draft comes from <code>$schema</code>, or the option <code>draft</code> (<code>'draft-04'</code>, <code>'draft-06'</code>, <code>'draft-07'</code>, <code>'2019-09'</code>, <code>'2020-12'</code>)</td></tr>
+              <tr><td><code>ajv.compile(schema)</code></td><td><code>compileJsonSchema(schema, options)</code></td></tr>
+              <tr><td><code>validate(data)</code> &rarr; <code>true</code>/<code>false</code></td><td><code>validate(data)</code> &rarr; <code>true</code>/<code>false</code>, compiled with <code>errors: false</code></td></tr>
+              <tr><td><code>validate.errors</code></td><td>what the function returns: <code>validate(data)</code> &rarr; <code>[]</code> when valid</td></tr>
+              <tr><td><code>ajv.compileAsync(schema)</code> with <code>loadSchema</code></td><td><code>compileJsonSchemaAsync(schema, { loadSchema })</code> (see <a href="#documents">Several documents</a>)</td></tr>
+              <tr><td><code>ajv.addSchema(schema, uri)</code></td><td>the option <code>schemas</code>: <code>{ uri: schema }</code>, or schemas with <code>$id</code></td></tr>
+              <tr><td><code>ajv.getSchema(id)</code>, ajv's cache</td><td>keep the compiled function: compile once, when the program starts</td></tr>
+              <tr><td><code>ajv.validate(schema, data)</code></td><td>compile once and call the function; compiling for every value is slow in both</td></tr>
+              <tr><td><code>ajv.validateSchema(schema)</code></td><td>compile the meta-schema, registered in <code>schemas</code> (see below)</td></tr>
+              <tr><td><code>ajv.addFormat(name, format)</code>, ajv-formats</td><td>the option <code>formats</code> (see <a href="#formats">Formats</a>)</td></tr>
+              <tr><td><code>standaloneCode(ajv, validate)</code></td><td><code>standaloneJsonSchema(schema, options)</code> (see <a href="#standalone">Standalone code</a>)</td></tr>
+              <tr><td><code>ajv.addKeyword('x-internal')</code> (an annotation)</td><td>the option <code>keywords: ['x-internal']</code></td></tr>
+              <tr><td><code>ajv.addKeyword()</code> with <code>validate</code>, <code>compile</code> or <code>macro</code></td><td>a definition in the option <code>keywords</code>, with the same three kinds (see <a href="guide.html#keywords">Keywords of your own</a>); <code>code</code> keywords, which write ajv's generated code, have no counterpart</td></tr>
+              <tr><td>ajv-keywords (<code>require('ajv-keywords')(ajv)</code>)</td><td><code>keywords: ajvKeywords()</code>, with the same results, but <code>transform</code>, <code>dynamicDefaults</code> and <code>select</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>ajv ships copies of the meta-schemas; to check schemas against draft-07, as <code>ajv.validateSchema()</code>:</p>
+        <pre><code class="language-js">const metaSchema = require('ajv/dist/refs/json-schema-draft-07.json');
+const validateSchema = compileJsonSchema({ $ref: 'http://json-schema.org/draft-07/schema#' }, { schemas: [metaSchema] });
+validateSchema({ type: 5 }); // ['type must be one of: array, boolean, ...', ...]</code></pre>
+
+        <h2 id="options">Options</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>ajv option</th><th>schiva</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>allErrors: true</code></td><td>the default; <code>allErrors: false</code> for the first error only (ajv's default)</td></tr>
+              <tr><td><code>strict</code>, <code>strictSchema</code></td><td><code>strict</code>: true by default, an unknown keyword throws; <code>strict: false</code> ignores it</td></tr>
+              <tr><td><code>strictTypes</code>, <code>strictTuples</code>, <code>strictRequired</code></td><td>no such warnings; a keyword whose <code>type</code> excludes it throws (<code>{ type: 'string', minimum: 1 }</code>), and is ignored with <code>strict: false</code></td></tr>
+              <tr><td><code>unicode</code> (default true)</td><td>always: string lengths count code points</td></tr>
+              <tr><td><code>validateFormats</code>, ajv-formats</td><td><code>formats</code></td></tr>
+              <tr><td><code>schemas</code></td><td><code>schemas</code></td></tr>
+              <tr><td><code>verbose</code>, <code>messages</code></td><td>errors always have their message; objects have <code>params</code> too</td></tr>
+              <tr><td><code>useDefaults</code>, <code>removeAdditional</code>, <code>coerceTypes</code></td><td>the same options, with the same results (see <a href="guide.html#changing-the-data">Changing the data</a>); a value is converted by its schema's own <code>type</code>, not inside <code>anyOf</code> and <code>oneOf</code></td></tr>
+              <tr><td><code>$data</code></td><td>not supported (see <a href="#not-supported">below</a>)</td></tr>
+              <tr><td><code>discriminator: true</code></td><td>always on, with ajv's rules and OpenAPI's <code>mapping</code> and implicit names too (see <a href="guide.html#discriminator">Discriminator</a>); errors about the tag have the keyword <code>discriminator</code> and ajv's <code>params</code></td></tr>
+              <tr><td><code>loadSchema</code></td><td>an option of <code>compileJsonSchemaAsync()</code></td></tr>
+              <tr><td><code>code: { source: true }</code></td><td><code>standaloneJsonSchema()</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h2 id="errors">Errors</h2>
+        <p>
+          By default a schiva function returns messages that start with the path of the field, ready for logs and HTTP
+          responses: <code>'lines[0].price must be at least 0'</code>. For code that reads the errors, as with
+          <code>validate.errors</code>, use <code>errors: 'objects'</code>:
+        </p>
+        <pre><code class="language-js">const validate = compileJsonSchema(schema, { errors: 'objects' });
+validate({ lines: [{ price: -1 }] });
+// [{ path: ['lines', 0, 'price'], pointer: '/lines/0/price', keyword: 'minimum', params: { limit: 0 },
+//    message: 'lines[0].price must be at least 0' }]</code></pre>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>ajv error</th><th>schiva error object</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>instancePath</code> (<code>'/lines/0/price'</code>)</td><td><code>pointer</code>, the same JSON Pointer; and <code>path</code>, as an array (<code>['lines', 0, 'price']</code>)</td></tr>
+              <tr><td><code>keyword</code></td><td><code>keyword</code>, with the same names, and <code>nullable</code> for a <code>null</code> the type does not allow</td></tr>
+              <tr><td><code>params</code></td><td><code>params</code>: <code>limit</code>, <code>allowedValues</code>, <code>allowedValue</code>, <code>pattern</code>, <code>format</code>, <code>type</code>, <code>multipleOf</code> as in ajv</td></tr>
+              <tr><td><code>message</code> (<code>'must be &gt;= 0'</code>)</td><td><code>message</code>, with the path in front: <code>'lines[0].price must be at least 0'</code></td></tr>
+              <tr><td><code>schemaPath</code></td><td>not given</td></tr>
+              <tr><td><code>required</code>: at the object, with <code>params.missingProperty</code></td><td><code>required</code>: at the path of the missing property</td></tr>
+              <tr><td><code>additionalProperties</code>: at the object, with <code>params.additionalProperty</code></td><td><code>additionalProperties</code>: at the path of the unexpected key, with <code>params.property</code></td></tr>
+              <tr><td><code>propertyNames</code>: <code>params.propertyName</code></td><td>the error of the key's check, at the key's path, with <code>propertyName: true</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          To show your own messages, or translate them (as with ajv-i18n or ajv-errors), build them from
+          <code>keyword</code> and <code>params</code>.
+        </p>
+
+        <h2 id="formats">Formats</h2>
+        <p>schiva checks the formats itself, without a plugin:</p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>ajv</th><th>schiva</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>addFormats(ajv)</code></td><td><code>{ formats: true }</code></td></tr>
+              <tr><td><code>addFormats(ajv, ['date', 'email'])</code></td><td><code>{ formats: ['date', 'email'] }</code></td></tr>
+              <tr><td><code>ajv.addFormat('phone', /^\+\d+$/)</code></td><td><code>{ formats: { phone: /^\+\d+$/ } }</code></td></tr>
+              <tr><td><code>ajv.addFormat('even', { validate: (s) =&gt; ... })</code></td><td><code>{ formats: { even: (s) =&gt; ... } }</code></td></tr>
+              <tr><td><code>ajv.addFormat('version', { validate, compare })</code></td><td><code>{ formats: { version: { validate, compare } } }</code></td></tr>
+              <tr><td><code>formatMinimum</code>, <code>formatMaximum</code> and the exclusive ones (ajv-formats)</td><td>the same keywords, with the same results (see <a href="guide.html#formats">Formats</a>)</td></tr>
+              <tr><td>unknown format: throws in strict mode</td><td>not checked, as an annotation</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          schiva also checks <code>idn-hostname</code> and <code>idn-email</code>, and passes every optional format
+          test of the JSON-Schema-Test-Suite (see <a href="guide.html#formats">Formats</a> in the guide).
+        </p>
+
+        <h2 id="documents">Several documents</h2>
+        <p>
+          Documents that <code>$ref</code> points to go in the option <code>schemas</code>, by URI or with their
+          <code>$id</code>. To load them as ajv's <code>compileAsync()</code> does, use
+          <code>compileJsonSchemaAsync()</code> with the same <code>loadSchema</code> function: it is called once for
+          each document the schema reaches and <code>schemas</code> does not have.
+        </p>
+        <pre><code class="language-js">compileJsonSchema(orderSchema, { schemas: [addressSchema, countrySchema] }); // schemas with "$id"
+await compileJsonSchemaAsync(orderSchema, { loadSchema }); // loads them</code></pre>
+        <p>
+          A reference that does not resolve throws when compiling. Each document is read in the draft its own
+          <code>$schema</code> names, so a 2020-12 schema can reference draft-07 documents.
+        </p>
+
+        <h2 id="standalone">Standalone code</h2>
+        <p>
+          <code>standaloneJsonSchema(schema, options)</code> gives the source of a module to write to a file when
+          building, as ajv's <code>standaloneCode()</code>. There is no instance to create, the options are those of
+          <code>compileJsonSchema()</code> with <code>format: 'commonjs'</code> or <code>'esm'</code>, and the module
+          needs nothing else, not even schiva. See <a href="guide.html#standalone">Standalone code</a>.
+        </p>
+
+        <h2 id="typescript">TypeScript</h2>
+        <p>
+          ajv types a validator with <code>ajv.compile&lt;T&gt;(schema)</code>, which is a type guard. In schiva,
+          <code>compileJsonSchema&lt;T&gt;(schema, { errors: false })</code> is the type guard for <code>T</code>.
+          ajv's <code>JSONSchemaType&lt;T&gt;</code>, which checks a schema against a type, has no counterpart; with the
+          <a href="guide.html#typescript">DSL</a>, the type comes from the schema instead:
+          <code>type Order = Infer&lt;typeof order&gt;</code>.
+        </p>
+
+        <h2 id="not-supported">What schiva does not do</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>ajv feature</th><th>In schiva</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Keywords that write generated code (<code>addKeyword</code> with <code>code</code>)</td><td>Not supported: define them with <code>validate</code>, <code>compile</code> or <code>macro</code>. ajv-keywords <code>transform</code> and <code>dynamicDefaults</code> change the data, and <code>select</code> needs <code>$data</code>.</td></tr>
+              <tr><td><code>$data</code> references</td><td>Not supported: <code>$data</code> as a keyword throws. Careful: inside the value of <code>const</code> or <code>enum</code>, <code>{ "$data": "1/b" }</code> is not rejected but read as a plain value, as the JSON Schema standard says. Check those comparisons in your code.</td></tr>
+              <tr><td>Asynchronous validation (<code>$async</code> schemas)</td><td><code>$async</code> throws (ignored with <code>strict: false</code>): validation is synchronous. Loading documents is supported, with <code>compileJsonSchemaAsync()</code>.</td></tr>
+              <tr><td>JSON Type Definition (JTD, <code>ajv/dist/jtd</code>)</td><td>Not supported.</td></tr>
+              <tr><td><code>errorMessage</code> (ajv-errors)</td><td>Throws, as an unknown keyword. Build messages from <code>keyword</code> and <code>params</code> of the error objects.</td></tr>
+              <tr><td><code>schemaPath</code> in errors</td><td>Not given; errors have the path of the value, the keyword and its params.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h2 id="checklist">Checklist</h2>
+        <ol>
+          <li>Replace <code>ajv.compile(schema)</code> with <code>compileJsonSchema(schema, options)</code>, compiled once, when the program starts.</li>
+          <li>Pick the result: messages (default), <code>errors: 'objects'</code> in place of <code>validate.errors</code>, or <code>errors: false</code> for <code>true</code>/<code>false</code>.</li>
+          <li>If you relied on ajv stopping at the first error, add <code>allErrors: false</code>.</li>
+          <li>Move <code>addSchema()</code> documents to the option <code>schemas</code>, and ajv-formats to <code>formats</code>.</li>
+          <li>Compile every schema once: an unknown or misspelled keyword throws, which shows what to change.</li>
+          <li>Look for <code>$data</code>, which schiva does not do; <code>useDefaults</code>, <code>removeAdditional</code> and <code>coerceTypes</code> are the same options.</li>
+          <li>Where error objects are read, map <code>instancePath</code> to <code>pointer</code>, and <code>required</code> and <code>additionalProperties</code> errors to their new paths.</li>
+        </ol>
+      </article>
+    </div>
+
+    <footer class="footer">
+      <div class="container">
+        <span>schiva is MIT licensed. &copy; Jes&uacute;s Seijas</span>
+        <span>
+          <a href="./">Home</a> &middot; <a href="guide.html">Guide</a> &middot;
+          <a href="https://github.com/jesus-seijas-sp/schiva">GitHub</a> &middot;
+          <a href="https://www.npmjs.com/package/schiva">npm</a>
+        </span>
+      </div>
+    </footer>
+  </body>
+</html>

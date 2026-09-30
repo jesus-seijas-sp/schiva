@@ -170,6 +170,27 @@ const paymentInvalid = {
   iban: 'X',
 };
 
+// 5) A shape among 8, picked by the value of its property "kind" (OpenAPI discriminator; ajv with its option
+// discriminator: true, the other validators through oneOf).
+const shapeKinds = ['circle', 'square', 'rectangle', 'triangle', 'ellipse', 'polygon', 'line', 'point'];
+const shapeSchema = {
+  type: 'object',
+  required: ['kind'],
+  discriminator: { propertyName: 'kind' },
+  oneOf: shapeKinds.map((kind) => ({
+    type: 'object',
+    properties: {
+      kind: { const: kind },
+      id: { type: 'integer', minimum: 0 },
+      label: { type: 'string', maxLength: 50 },
+      [`${kind}Size`]: { type: 'number', exclusiveMinimum: 0 },
+    },
+    required: ['kind', 'id', `${kind}Size`],
+  })),
+};
+const shapeValid = { kind: 'polygon', id: 7, label: 'hexagon', polygonSize: 2.5 };
+const shapeInvalid = { kind: 'polygon', id: -1, label: 'hexagon', polygonSize: 0 };
+
 // `draft` names the validators that run a case (see validators.js forDraft); draft-07 when it is not given.
 const cases = [
   { name: 'moltar strict · valid', schema: moltarSchema, data: moltarValid, expect: true },
@@ -204,6 +225,8 @@ const cases = [
     data: paymentInvalid,
     expect: false,
   },
+  { name: 'shapes, discriminator (8 kinds) · valid', schema: shapeSchema, data: shapeValid, expect: true },
+  { name: 'shapes, discriminator (8 kinds) · invalid', schema: shapeSchema, data: shapeInvalid, expect: false },
 ];
 
 // Schema whose compile time is measured.

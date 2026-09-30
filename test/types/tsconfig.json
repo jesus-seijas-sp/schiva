@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "noEmit": true,
+    "target": "es2020",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "skipLibCheck": false,
+    "types": []
+  },
+  "files": [
+    "index.ts",
+    "../../src/index.d.ts"
+  ]
+}

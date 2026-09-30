@@ -6,14 +6,16 @@ class ObjType extends ValidateType {
     this.schema = options.schema;
   }
 
-  validate(value, fieldName = 'Value') {
-    const result = super.validate(value, fieldName);
+  // The field name goes to the schema as received (see AllOfType.validate()).
+  validate(value, fieldName = undefined) {
+    const name = fieldName || 'Value';
+    const result = super.validate(value, name);
     if (result) {
       return result;
     }
     if (value !== undefined && value !== null) {
       if (typeof value !== 'object' || Array.isArray(value)) {
-        return `${fieldName} must be an object`;
+        return `${name} must be an object`;
       }
       if (this.schema) return this.schema.validate(value, fieldName);
     }

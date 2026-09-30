@@ -64,7 +64,8 @@ describe('JSON Schema false', () => {
   it('Should work in not, oneOf, anyOf and references', () => {
     expect(errorsOf({ not: false }, [1, null])).toEqual([[], []]);
     expect(errorsOf({ oneOf: [true, false, false] }, [1])).toEqual([[]]);
-    expect(errorsOf({ oneOf: [false, false] }, [1])).toEqual([['Value is not allowed', 'Value is not allowed']]);
+    // Each error once, though both alternatives give it.
+    expect(errorsOf({ oneOf: [false, false] }, [1])).toEqual([['Value is not allowed']]);
     expect(errorsOf({ anyOf: [false, { type: 'integer' }] }, [1, 'x'])).toEqual([
       [],
       ['Value is not allowed', 'Value must be a number'],

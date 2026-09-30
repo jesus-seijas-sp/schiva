@@ -11,6 +11,7 @@
     "url": "https://github.com/jesus-seijas-sp/schiva/issues"
   },
   "main": "./src/index.js",
+  "types": "./src/index.d.ts",
   "type": "commonjs",
   "files": [
     "src"
@@ -18,10 +19,12 @@
   "scripts": {
     "lint": "eslint .",
     "lintfix": "eslint --fix .",
-    "test": "eslint . && jest --silent --coverage .",
+    "test": "eslint . && tsc -p test/types && jest --silent --coverage .",
     "bench": "cd bench && pnpm install && pnpm start",
     "bench:quick": "cd bench && pnpm install && pnpm run quick",
-    "conformance": "cd bench && pnpm install && pnpm run conformance"
+    "conformance": "cd bench && pnpm install && pnpm run conformance",
+    "test:types": "tsc -p test/types",
+    "build:helpers": "node scripts/generate-standalone-helpers.js && eslint --fix src/standalone-helpers.js"
   },
   "keywords": [
     "schema",
@@ -36,7 +39,9 @@
     "jsonschema",
     "schema-validation",
     "dsl",
-    "ajv-alternative"
+    "ajv-alternative",
+    "typescript",
+    "types"
   ],
   "author": "Jesús Seijas <jseijas@gmail.com>",
   "license": "MIT",
@@ -52,7 +57,8 @@
     "eslint-plugin-prettier": "^5.5.5",
     "globals": "^17.0.0",
     "jest": "^30.2.0",
-    "prettier": "^3.8.0"
+    "prettier": "^3.8.0",
+    "typescript": "^7.0.2"
   },
   "packageManager": "pnpm@10.26.1",
   "publishConfig": {

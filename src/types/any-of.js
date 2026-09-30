@@ -6,8 +6,9 @@ class AnyOfType extends ValidateType {
     this.types = toTypes(options.types, 'AnyOf types');
   }
 
-  validate(value, fieldName = 'Value') {
-    const result = super.validate(value, fieldName);
+  // The field name goes to the alternatives as received (see AllOfType.validate()).
+  validate(value, fieldName = undefined) {
+    const result = super.validate(value, fieldName || 'Value');
     if (result) {
       return result;
     }

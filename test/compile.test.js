@@ -98,9 +98,10 @@ describe('compileFirstError', () => {
     expect(firstError({ lines: [{ qty: 1 }], extra: {} })).toBeUndefined();
   });
 
-  it('Should name the root Value inside ValidateType containers, like validate', () => {
+  it('Should name the keys of a Schema inside ValidateType containers as the Schema does, like validate', () => {
     const type = AllOf({ types: [new Schema({ id: String() })] });
-    expect(compileFirstError(type)({ id: 1 })).toBe('Value.id must be a string');
+    expect(compileFirstError(type)({ id: 1 })).toBe('id must be a string');
+    expect(type.validate({ id: 1 })).toEqual(['id must be a string']);
     expect(compileFirstError(ArrayOf({ type: Integer() }))([1, 'x'])).toBe('Value[1] must be a number');
   });
 
@@ -150,13 +151,16 @@ describe('compileErrors', () => {
     expect(compileErrors(type)({ id: 7 })).toEqual([]);
   });
 
-  it('Should give only the errors of the first failing AllOf type', () => {
+  it('Should give the errors of every failing AllOf type, each once', () => {
     const type = AllOf({ types: [new Schema({ a: Integer(), b: Integer() }), new Schema({ c: Integer() })] });
     expect(compileErrors(type)({ a: 'x', b: 'y', c: 'z' })).toEqual([
-      'Value.a must be a number',
-      'Value.b must be a number',
+      'a must be a number',
+      'b must be a number',
+      'c must be a number',
     ]);
-    expect(compileErrors(type)({ a: 1, b: 2, c: 'z' })).toEqual(['Value.c must be a number']);
+    expect(compileErrors(type)({ a: 1, b: 2, c: 'z' })).toEqual(['c must be a number']);
+    const twice = AllOf({ types: [new Schema({ a: Integer() }), new Schema({ a: Integer({ min: 0 }) })] });
+    expect(compileErrors(twice)({ a: 'x' })).toEqual(['a must be a number']);
   });
 
   it('Should flatten the errors of custom types', () => {

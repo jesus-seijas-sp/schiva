@@ -1,4 +1,4 @@
-// JSON-Schema-Test-Suite (draft-07, 2019-09 and 2020-12): the test groups, the documents they reference, and each
+// JSON-Schema-Test-Suite (draft-04, draft-06, draft-07, 2019-09 and 2020-12): the test groups, the documents they reference, and each
 // validator's results.
 const fs = require('fs');
 const path = require('path');
@@ -7,6 +7,8 @@ const SUITE = path.dirname(require.resolve('json-schema-test-suite/package.json'
 
 // Drafts by the name of their folder in the suite, with the meta-schema files that ajv ships for them.
 const DRAFTS = {
+  draft4: ['ajv-draft-04/dist/refs/json-schema-draft-04.json'],
+  draft6: ['ajv/dist/refs/json-schema-draft-06.json'],
   draft7: ['ajv/dist/refs/json-schema-draft-07.json'],
   'draft2019-09': 'ajv/dist/refs/json-schema-2019-09',
   'draft2020-12': 'ajv/dist/refs/json-schema-2020-12',
@@ -47,15 +49,16 @@ function loadRemotes(draft = 'draft7') {
       remotes[`http://localhost:1234/${file}`] = JSON.parse(fs.readFileSync(path.join(remotesDir, file), 'utf8'));
     });
   metaSchemas(draft).forEach((schema) => {
-    remotes[schema.$id.replace(/#$/, '')] = schema;
+    remotes[(schema.$id || schema.id).replace(/#$/, '')] = schema;
   });
   return remotes;
 }
 
 // Every test group of a draft's suite, in a stable order: { file, description, schema, tests }.
-function loadGroups(draft = 'draft7') {
+// With `folder` 'optional/format', the optional tests of the "format" keyword instead.
+function loadGroups(draft = 'draft7', folder = '') {
   checkDraft(draft);
-  const dir = path.join(SUITE, 'tests', draft);
+  const dir = path.join(SUITE, 'tests', draft, folder);
   const groups = [];
   fs.readdirSync(dir)
     .filter((f) => f.endsWith('.json'))

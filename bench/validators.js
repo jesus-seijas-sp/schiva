@@ -33,7 +33,7 @@ function schiva(options) {
 
 function ajv(options) {
   return (schema, remotes) => {
-    const instance = new Ajv({ strict: false, ...options });
+    const instance = new Ajv({ strict: false, discriminator: true, ...options });
     // ajv has the draft-07 meta-schema already.
     each(remotes)
       .filter(([uri]) => uri !== DRAFT_07)
@@ -170,7 +170,7 @@ const LATER_DRAFTS = {
 
 function ajvOf(AjvClass, options) {
   return (schema, remotes) => {
-    const instance = new AjvClass({ strict: false, ...options });
+    const instance = new AjvClass({ strict: false, discriminator: true, ...options });
     each(remotes)
       .filter(([uri]) => !uri.startsWith('https://json-schema.org/'))
       .forEach(([uri, remote]) => instance.addSchema(remote, uri));
@@ -228,3 +228,5 @@ function forDraft(draft = 'draft7') {
 // The draft-07 validators, as before; forDraft() gives the ones of each draft.
 module.exports = validators;
 module.exports.forDraft = forDraft;
+// The drafts forDraft() has validators for, which the speed benchmarks run (conformance.js runs draft-04 and draft-06 too).
+module.exports.SPEED_DRAFTS = ['draft7', ...Object.keys(LATER_DRAFTS)];

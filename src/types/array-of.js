@@ -1,4 +1,6 @@
 const { hasDuplicates } = require('./has-duplicates');
+const { assignDefaults } = require('../defaults');
+const { readCoerced } = require('../coerce');
 const { ValidateType, isPlainObject, toType, toTypes } = require('./validate-type');
 
 class ArrayOfType extends ValidateType {
@@ -10,6 +12,8 @@ class ArrayOfType extends ValidateType {
       : toType(options.type, 'ArrayOf type');
     this.min = options.min;
     this.max = options.max;
+    // [{ key, value, empty }]: defaults assigned to missing positions of a tuple before checking it (useDefaults).
+    this.defaults = options.defaults || [];
     this.unique = options.unique;
     // At least one element must satisfy it, or between minContains (default 1) and maxContains elements.
     this.contains = toType(options.contains, 'ArrayOf contains');
@@ -65,6 +69,9 @@ class ArrayOfType extends ValidateType {
       if (!Array.isArray(value)) {
         return `${fieldName} must be an array`;
       }
+      if (this.defaults.length > 0) {
+        assignDefaults(value, this.defaults);
+      }
       if (this.min !== undefined && value.length < this.min) {
         return `${fieldName} must have at least ${this.min} elements`;
       }
@@ -81,7 +88,8 @@ class ArrayOfType extends ValidateType {
       if (this.type) {
         const errors = [];
         const check = (type, i) => {
-          const item = value[i];
+          // With coerceTypes, an element is converted to the types of its schema as it is read (see coerce.js).
+          const item = readCoerced(value, i, type, value[i]);
           if (!type.isValid(item)) {
             errors.push(type.errors(item, `${fieldName}[${i}]`));
           }
@@ -111,6 +119,9 @@ class ArrayOfType extends ValidateType {
     if (presence !== undefined) {
       return presence;
     }
+    if (Array.isArray(value) && this.defaults.length > 0) {
+      assignDefaults(value, this.defaults);
+    }
     if (
       !Array.isArray(value) ||
       (this.min !== undefined && value.length < this.min) ||
@@ -122,20 +133,20 @@ class ArrayOfType extends ValidateType {
     }
     if (Array.isArray(this.type)) {
       for (let i = 0; i < this.type.length; i += 1) {
-        if (!this.type[i].isValid(value[i])) {
+        if (!this.type[i].isValid(readCoerced(value, i, this.type[i], value[i]))) {
           return false;
         }
       }
       if (this.additionalType) {
         for (let i = this.type.length; i < value.length; i += 1) {
-          if (!this.additionalType.isValid(value[i])) {
+          if (!this.additionalType.isValid(readCoerced(value, i, this.additionalType, value[i]))) {
             return false;
           }
         }
       }
     } else if (this.type) {
       for (let i = 0; i < value.length; i += 1) {
-        if (!this.type.isValid(value[i])) {
+        if (!this.type.isValid(readCoerced(value, i, this.type, value[i]))) {
           return false;
         }
       }

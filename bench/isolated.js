@@ -16,16 +16,7 @@ const validators = require('./validators');
 
 const { forDraft } = validators;
 const { cases, compileCase, prepareCase } = require('./lib/cases');
-const {
-  DRAFTS,
-  loadRemotes,
-  loadGroups,
-  compileGroup,
-  evaluate,
-  commonGroups,
-  suiteRun,
-  summary,
-} = require('./lib/suite');
+const { loadRemotes, loadGroups, compileGroup, evaluate, commonGroups, suiteRun, summary } = require('./lib/suite');
 
 const RESULTS = path.join(__dirname, 'results');
 const RUNS = Number(process.env.BENCH_RUNS) || 3;
@@ -179,6 +170,6 @@ const [first, ...rest] = process.argv.slice(2);
 if (first === '--child') {
   child(rest[0], rest.slice(1));
 } else {
-  if (!first || first === 'suite') (rest[0] ? [rest[0]] : Object.keys(DRAFTS)).forEach(suite);
+  if (!first || first === 'suite') (rest[0] ? [rest[0]] : validators.SPEED_DRAFTS).forEach(suite);
   if (!first || first === 'object') payloads();
 }

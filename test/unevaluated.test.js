@@ -18,7 +18,7 @@ describe('unevaluatedProperties', () => {
   it('Should reject the keys no other keyword evaluates', () => {
     const schema = { $schema: DRAFT_2020, type: 'object', properties: { a: {} }, unevaluatedProperties: false };
     expect(check(schema, { a: 1 })).toEqual([]);
-    expect(check(schema, { a: 1, b: 2 })).toEqual(['Unexpected key: Value.b']);
+    expect(check(schema, { a: 1, b: 2 })).toEqual(['Unexpected key: b']);
   });
 
   it('Should check the keys left against a schema', () => {
@@ -29,7 +29,7 @@ describe('unevaluatedProperties', () => {
       unevaluatedProperties: { type: 'string' },
     };
     expect(check(schema, { a: 1, b: 'x' })).toEqual([]);
-    expect(check(schema, { a: 1, b: 2 })).toEqual(['Value.b must be a string']);
+    expect(check(schema, { a: 1, b: 2 })).toEqual(['b must be a string']);
   });
 
   it('Should see the keys that allOf, $ref and patternProperties evaluate', () => {
@@ -42,7 +42,7 @@ describe('unevaluatedProperties', () => {
       unevaluatedProperties: false,
     };
     expect(check(schema, { id: 1, name: 'a', 'x-tag': 1 })).toEqual([]);
-    expect(check(schema, { id: 1, other: 1 })).toEqual(['Unexpected key: Value.other']);
+    expect(check(schema, { id: 1, other: 1 })).toEqual(['Unexpected key: other']);
   });
 
   it('Should only see the keys of the anyOf and oneOf alternatives that match', () => {
@@ -55,7 +55,7 @@ describe('unevaluatedProperties', () => {
       unevaluatedProperties: false,
     };
     expect(check(schema, { a: 1, b: 2 })).toEqual([]);
-    expect(check(schema, { a: 1, b: 3 })).toEqual(['Unexpected key: Value.b']);
+    expect(check(schema, { a: 1, b: 3 })).toEqual(['Unexpected key: b']);
     expect(check({ ...schema, oneOf: schema.anyOf, anyOf: undefined }, { a: 1 })).toEqual([]);
   });
 
@@ -64,13 +64,13 @@ describe('unevaluatedProperties', () => {
     const transfer = { properties: { method: { const: 'transfer' }, iban: {}, bic: {} }, required: ['iban'] };
     const base = { $schema: DRAFT_2020, properties: { id: {} }, unevaluatedProperties: false };
     const value = { id: 1, method: 'card', card: 'x', expiry: 'y', iban: 'z' };
-    expect(check({ ...base, oneOf: [card, transfer] }, value)).toEqual(['Unexpected key: Value.iban']);
-    expect(check({ ...base, anyOf: [card, transfer] }, value)).toEqual(['Unexpected key: Value.iban']);
+    expect(check({ ...base, oneOf: [card, transfer] }, value)).toEqual(['Unexpected key: iban']);
+    expect(check({ ...base, anyOf: [card, transfer] }, value)).toEqual(['Unexpected key: iban']);
     expect(check({ ...base, if: card, then: { properties: { cvv: {}, pin: {} } } }, { ...value, cvv: 1 })).toEqual([
-      'Unexpected key: Value.iban',
+      'Unexpected key: iban',
     ]);
     const dependent = { ...base, dependentSchemas: { id: { properties: { a: {}, b: {} } } } };
-    expect(check(dependent, { id: 1, a: 1, c: 1 })).toEqual(['Unexpected key: Value.c']);
+    expect(check(dependent, { id: 1, a: 1, c: 1 })).toEqual(['Unexpected key: c']);
     expect(check({ ...base, oneOf: [card, transfer] }, { id: 1, method: 'card', card: 'x', expiry: 'y' })).toEqual([]);
   });
 
@@ -83,7 +83,7 @@ describe('unevaluatedProperties', () => {
       unevaluatedProperties: false,
     };
     expect(check(schema, { kind: 'user', name: 'a' })).toEqual([]);
-    expect(check(schema, { kind: 'user', id: 1 })).toEqual(['Unexpected key: Value.id']);
+    expect(check(schema, { kind: 'user', id: 1 })).toEqual(['Unexpected key: id']);
     expect(check(schema, { id: 1 })).toEqual([]);
   });
 
@@ -95,7 +95,7 @@ describe('unevaluatedProperties', () => {
       unevaluatedProperties: false,
     };
     expect(check(schema, { card: 1, cvv: 1 })).toEqual([]);
-    expect(check(schema, { cvv: 1 })).toEqual(['Unexpected key: Value.cvv']);
+    expect(check(schema, { cvv: 1 })).toEqual(['Unexpected key: cvv']);
   });
 
   it('Should not see the keys of not, nor the ones only required names', () => {
@@ -105,7 +105,7 @@ describe('unevaluatedProperties', () => {
       required: ['b'],
       unevaluatedProperties: false,
     };
-    expect(check(schema, { a: 1, b: 1 })).toEqual(['Unexpected key: Value.a', 'Unexpected key: Value.b']);
+    expect(check(schema, { a: 1, b: 1 })).toEqual(['Unexpected key: a', 'Unexpected key: b']);
   });
 
   it('Should count every key as evaluated by additionalProperties, even when it is true', () => {

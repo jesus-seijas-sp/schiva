@@ -35,8 +35,9 @@ class ValidateType {
   }
 
   // Error messages of a value already known to be invalid; containers call it on their failing children
-  // so types whose validate() starts with an isValid() fast path can skip it.
-  errors(value, fieldName = 'Value') {
+  // so types whose validate() starts with an isValid() fast path can skip it. The field name goes to validate() as
+  // received, which names the value "Value" when there is none.
+  errors(value, fieldName = undefined) {
     return this.validate(value, fieldName);
   }
 
@@ -84,9 +85,11 @@ class ValidateType {
   }
 }
 
+// The messages of a validate() result as a flat list, each one once: parts of an allOf, or alternatives, can report
+// the same error.
 function toErrors(result) {
   if (Array.isArray(result)) {
-    return result.flat(Infinity);
+    return Array.from(new Set(result.flat(Infinity)));
   }
   return result ? [result] : [];
 }
