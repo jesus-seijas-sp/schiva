@@ -198,6 +198,17 @@ function checkKeywords(json, path) {
       throw new Error(`Unsupported JSON Schema type "${typeName}" at ${path}`);
     }
   });
+  // With the option "formats", a format it does not name is most likely a mistake, as in ajv's strict mode.
+  if (
+    context.strict &&
+    context.knownFormats &&
+    typeof json.format === 'string' &&
+    !context.knownFormats.has(json.format)
+  ) {
+    throw new Error(
+      `Unknown JSON Schema format "${json.format}" at ${path}: name it in the option "formats" ({ "${json.format}": false } leaves it unchecked), or use strict: false`
+    );
+  }
   const { draft } = context;
   Object.keys(json).forEach((keyword) => {
     if (isIgnored(keyword, draft)) {
@@ -222,16 +233,19 @@ function checkKeywords(json, path) {
 // The draft of a schema: options.draft, or the one its "$schema" names. Without either, or with another "$schema",
 // the schema is read as draft-07, as before later drafts were supported.
 // The formats to check, from the option "formats": true for every built-in one, a list of built-in names, or an object
-// with, for each name, true (the built-in one), a regular expression or a function. By name, the check: a function or
-// a regular expression. Without the option, "format" is an annotation and nothing is checked.
-// Also { checks, compares }: the comparisons of the formats whose values can be compared (the built-in date, time and
-// date-time, and formats of your own given as { validate, compare }), for formatMinimum and the like.
+// with, for each name, true (the built-in one), a regular expression, a function, or false (a format that is known but
+// not checked, as ajv's addFormat(name, true)). By name, the check: a function or a regular expression. Without the
+// option, "format" is an annotation and nothing is checked.
+// Also { checks, compares, known }: the comparisons of the formats whose values can be compared (the built-in date,
+// time and date-time, and formats of your own given as { validate, compare }), for formatMinimum and the like; and
+// with the option, the names it gives, checked or not (with strict: true another format throws).
 function formatsOf(option) {
   const checks = new Map();
   const compares = new Map();
   if (option === undefined || option === false) {
-    return { checks, compares };
+    return { checks, compares, known: undefined };
   }
+  const known = new Set();
   const isCheck = (check) => check instanceof RegExp || typeof check === 'function';
   const addBuiltIn = (name) => {
     if (!Object.prototype.hasOwnProperty.call(FORMATS, name)) {
@@ -264,14 +278,22 @@ function formatsOf(option) {
         }
       } else if (check !== false) {
         throw new Error(
-          `Unsupported JSON Schema option "formats": "${name}" must be true, a regular expression, a function or { validate, compare }`
+          `Unsupported JSON Schema option "formats": "${name}" must be true, false, a regular expression, a function or { validate, compare }`
         );
       }
+      known.add(name);
     });
   } else {
     throw new Error('Unsupported JSON Schema option "formats": expected true, a list of names or an object');
   }
-  return { checks, compares };
+  checks.forEach((check, name) => known.add(name));
+  return { checks, compares, known };
+}
+
+// Every built-in format, as the option "formats" takes them ({ date: true, ... }), to add formats of your own or known
+// ones left unchecked: formats: { ...builtInFormats(), int32: false }.
+function builtInFormats() {
+  return Object.fromEntries(Object.keys(FORMATS).map((name) => [name, true]));
 }
 
 // The limits of the value of the format of a node (formatMinimum, formatMaximum, formatExclusiveMinimum and
@@ -327,6 +349,16 @@ function useDefaultsOf(options) {
     throw new Error('Unsupported JSON Schema option "useDefaults": expected true, false or \'empty\'');
   }
   return useDefaults;
+}
+
+// The option "multipleOfPrecision": a number of decimal digits; "multipleOf" then accepts a value whose division is
+// within 1e-multipleOfPrecision of an integer, so 0.3 is a multiple of 0.1 (see FloatType.isMultiple()).
+function multipleOfPrecisionOf(options) {
+  const { multipleOfPrecision } = options;
+  if (multipleOfPrecision !== undefined && !(Number.isInteger(multipleOfPrecision) && multipleOfPrecision > 0)) {
+    throw new Error('Unsupported JSON Schema option "multipleOfPrecision": expected a positive integer');
+  }
+  return multipleOfPrecision;
 }
 
 // The option "coerceTypes": true converts values to the types "type" asks for (see coerce.js), 'array' also to and from
@@ -869,6 +901,7 @@ function convertNumber(json, Type, path) {
       exclusiveMin: json.exclusiveMinimum === true ? json.minimum : undefined,
       exclusiveMax: json.exclusiveMaximum === true ? json.maximum : undefined,
       multipleOf: json.multipleOf,
+      multipleOfPrecision: context.multipleOfPrecision,
     });
   }
   return new Type({
@@ -877,6 +910,7 @@ function convertNumber(json, Type, path) {
     exclusiveMin: json.exclusiveMinimum,
     exclusiveMax: json.exclusiveMaximum,
     multipleOf: json.multipleOf,
+    multipleOfPrecision: context.multipleOfPrecision,
   });
 }
 
@@ -1328,6 +1362,7 @@ function fromJsonSchema(json, options = {}) {
   const { annotations, custom } = keywordsOf(options);
   const useDefaults = useDefaultsOf(options);
   const coerceTypes = coerceTypesOf(options);
+  const multipleOfPrecision = multipleOfPrecisionOf(options);
   const formats = formatsOf(options.formats);
   const removeAdditional = removeAdditionalOf(options);
   const index = new RefIndex(json, options.schemas, draftOf(options));
@@ -1345,6 +1380,8 @@ function fromJsonSchema(json, options = {}) {
     formats: formats.checks,
     // The comparisons of the formats whose values can be compared (see formatLimitsOf()).
     formatCompares: formats.compares,
+    // With the option "formats", the names it gives (see checkKeywords()).
+    knownFormats: formats.known,
     scope: emptyScope,
     // Options "strict" and "keywords" (see isIgnored()), and the nodes without the keywords of other drafts (viewOf()).
     strict,
@@ -1360,6 +1397,8 @@ function fromJsonSchema(json, options = {}) {
     composite: 0,
     // Option "coerceTypes" (see coerce.js).
     coerceTypes,
+    // Option "multipleOfPrecision" (see FloatType.isMultiple()).
+    multipleOfPrecision,
   };
   try {
     const type = convert(json, '#');
@@ -1421,4 +1460,5 @@ module.exports = {
   compileJsonSchema,
   loadJsonSchemas,
   compileJsonSchemaAsync,
+  builtInFormats,
 };

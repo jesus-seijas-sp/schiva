@@ -1,0 +1,993 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Benchmarks &middot; schiva</title>
+    <meta
+      name="description"
+      content="schiva compared with ajv and nine other JSON Schema validators: tests of the JSON-Schema-Test-Suite passed, speed on the suite and on payloads, compile time, features and their speed."
+    />
+    <link rel="canonical" href="https://schiva.js.org/benchmarks.html" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230d7c66'/%3E%3Ctext x='16' y='22.5' font-family='monospace' font-size='18' font-weight='700' fill='white' text-anchor='middle'%3Es%3C/text%3E%3C/svg%3E"
+    />
+    <link rel="stylesheet" href="style.css" />
+    <script src="main.js"></script>
+  </head>
+  <body>
+    <!-- Written by bench/report.js from the results of the benchmarks: do not edit, run it again. -->
+    <header class="header">
+      <div class="header-inner">
+        <a class="logo" href="./"><span class="logo-mark">s</span>schiva</a>
+        <nav class="nav">
+          <a href="guide.html">Guide</a>
+          <a href="playground.html">Playground</a>
+          <a href="api.html">API</a>
+          <a class="hide-small" href="benchmarks.html" aria-current="page">Benchmarks</a>
+          <a class="hide-small" href="migrating-from-ajv.html">From ajv</a>
+          <a href="https://github.com/jesus-seijas-sp/schiva">GitHub</a>
+          <button class="theme-toggle" type="button" aria-label="Switch between light and dark theme">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />
+            </svg>
+          </button>
+        </nav>
+      </div>
+    </header>
+
+    <div class="docs">
+      <button class="menu-toggle" type="button" aria-expanded="false">&#9776; Contents</button>
+      <aside class="sidebar">
+        <h4>Benchmarks</h4>
+        <ul>
+          <li><a href="#summary">Summary</a></li>
+          <li><a href="#conformance">Tests passed</a></li>
+          <li><a href="#suite-speed">Speed on the test suite</a></li>
+          <li><a href="#payloads">Speed on payloads</a></li>
+          <li><a href="#compiling">Compiling</a></li>
+          <li><a href="#features">Speed of the features</a></li>
+          <li><a href="#comparison">schiva and ajv, feature by feature</a></li>
+          <li><a href="#libraries">Libraries</a></li>
+          <li><a href="#method">Method</a></li>
+        </ul>
+        <h4>More</h4>
+        <ul>
+          <li><a href="guide.html#performance">Performance in the guide</a></li>
+          <li><a href="migrating-from-ajv.html">Migrating from ajv</a></li>
+        </ul>
+      </aside>
+
+      <article class="content">
+        <h1>Benchmarks</h1>
+        <p class="intro">
+          schiva compared with ajv and nine other JSON Schema validators: how many tests of the JSON-Schema-Test-Suite
+          each one passes, how fast it validates the suite and realistic payloads, how fast it compiles a schema, and how
+          fast the features beyond validating are.
+        </p>
+
+        <h2 id="summary">Summary</h2>
+        <div class="stats">
+          <div class="stat"><span class="value">4,950</span><span class="label">tests of the JSON-Schema-Test-Suite, draft-04 to 2020-12: all passed (ajv: 4,836)</span></div>
+          <div class="stat"><span class="value">2.1&times;</span><span class="label">ajv's speed on the draft-07 test suite, first error</span></div>
+          <div class="stat"><span class="value">2.2&times;</span><span class="label">ajv's speed on the payloads below, on average (geometric mean), first error</span></div>
+          <div class="stat"><span class="value">44&times;</span><span class="label">ajv's speed compiling a schema</span></div>
+        </div>
+        <div class="callout">
+          <p>
+            schiva passes every test of the five drafts it supports. In the same mode, it validates faster than every
+            other library in every benchmark on this page, compiles faster than every other library that compiles
+            schemas, and is faster than ajv on every feature they share (2.5&times; on average).
+          </p>
+        </div>
+        <p>
+          Every chart compares libraries doing the same work: pick the mode above it. <em>true/false</em> only tells
+          whether the value is valid; <em>first error</em> stops at the first failing check and builds its error;
+          <em>all errors</em> builds every error. Longer is faster, and next to each library is how many times slower
+          than schiva it is.
+        </p>
+
+        <h2 id="conformance">Tests passed</h2>
+        <p>
+          Tests of the <a href="https://github.com/json-schema-org/JSON-Schema-Test-Suite">JSON-Schema-Test-Suite</a>
+          each library gets right, draft by draft (a schema it cannot compile counts as wrong for every test of its
+          group). Only schiva and ajv run draft-04 and draft-06 here; drafts 2019-09 and 2020-12 run with the libraries
+          that implement them.
+        </p>
+        <div class="table-wrap">
+          <table class="progress-table">
+            <thead>
+              <tr><th></th><th>draft-04</th><th>draft-06</th><th>draft-07</th><th>2019-09</th><th>2020-12</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><strong>schiva</strong></td><td><div class="progress full"><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="count">618 / 618</span></div></td><td><div class="progress full"><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="count">841 / 841</span></div></td><td><div class="progress full"><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="count">929 / 929</span></div></td><td><div class="progress full"><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="count">1261 / 1261</span></div></td><td><div class="progress full"><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="count">1301 / 1301</span></div></td></tr>
+              <tr><td>ajv</td><td><div class="progress"><div class="track"><div class="fill" style="width: 98.7%"></div></div><span class="count">610 / 618</span></div></td><td><div class="progress"><div class="track"><div class="fill" style="width: 99.0%"></div></div><span class="count">833 / 841</span></div></td><td><div class="progress"><div class="track"><div class="fill" style="width: 99.1%"></div></div><span class="count">921 / 929</span></div></td><td><div class="progress"><div class="track"><div class="fill" style="width: 97.8%"></div></div><span class="count">1233 / 1261</span></div></td><td><div class="progress"><div class="track"><div class="fill" style="width: 95.2%"></div></div><span class="count">1239 / 1301</span></div></td></tr>
+              <tr><td>@exodus/schemasafe</td><td><span class="count">not run</span></td><td><span class="count">not run</span></td><td><div class="progress"><div class="track"><div class="fill" style="width: 97.4%"></div></div><span class="count">905 / 929</span></div></td><td><div class="progress"><div class="track"><div class="fill" style="width: 97.4%"></div></div><span class="count">1228 / 1261</span></div></td><td><div class="progress"><div class="track"><div class="fill" style="width: 97.1%"></div></div><span class="count">1263 / 1301</span></div></td></tr>
+              <tr><td>@cfworker/json-schema</td><td><span class="count">not run</span></td><td><span class="count">not run</span></td><td><div class="progress"><div class="track"><div class="fill" style="width: 98.9%"></div></div><span class="count">919 / 929</span></div></td><td><div class="progress"><div class="track"><div class="fill" style="width: 99.0%"></div></div><span class="count">1248 / 1261</span></div></td><td><div class="progress"><div class="track"><div class="fill" style="width: 96.0%"></div></div><span class="count">1249 / 1301</span></div></td></tr>
+              <tr><td>json-schema-library</td><td><span class="count">not run</span></td><td><span class="count">not run</span></td><td><div class="progress"><div class="track"><div class="fill" style="width: 97.6%"></div></div><span class="count">907 / 929</span></div></td><td><div class="progress"><div class="track"><div class="fill" style="width: 99.9%"></div></div><span class="count">1260 / 1261</span></div></td><td><div class="progress"><div class="track"><div class="fill" style="width: 99.2%"></div></div><span class="count">1291 / 1301</span></div></td></tr>
+              <tr><td>is-my-json-valid</td><td><span class="count">not run</span></td><td><span class="count">not run</span></td><td><div class="progress"><div class="track"><div class="fill" style="width: 86.2%"></div></div><span class="count">801 / 929</span></div></td><td><span class="count">not run</span></td><td><span class="count">not run</span></td></tr>
+              <tr><td>jsen</td><td><span class="count">not run</span></td><td><span class="count">not run</span></td><td><div class="progress"><div class="track"><div class="fill" style="width: 82.0%"></div></div><span class="count">762 / 929</span></div></td><td><span class="count">not run</span></td><td><span class="count">not run</span></td></tr>
+              <tr><td>djv</td><td><span class="count">not run</span></td><td><span class="count">not run</span></td><td><div class="progress"><div class="track"><div class="fill" style="width: 85.1%"></div></div><span class="count">791 / 929</span></div></td><td><span class="count">not run</span></td><td><span class="count">not run</span></td></tr>
+              <tr><td>jsonschema</td><td><span class="count">not run</span></td><td><span class="count">not run</span></td><td><div class="progress"><div class="track"><div class="fill" style="width: 97.4%"></div></div><span class="count">905 / 929</span></div></td><td><span class="count">not run</span></td><td><span class="count">not run</span></td></tr>
+              <tr><td>tv4</td><td><span class="count">not run</span></td><td><span class="count">not run</span></td><td><div class="progress"><div class="track"><div class="fill" style="width: 86.7%"></div></div><span class="count">805 / 929</span></div></td><td><span class="count">not run</span></td><td><span class="count">not run</span></td></tr>
+              <tr><td>z-schema</td><td><span class="count">not run</span></td><td><span class="count">not run</span></td><td><div class="progress"><div class="track"><div class="fill" style="width: 92.5%"></div></div><span class="count">859 / 929</span></div></td><td><span class="count">not run</span></td><td><span class="count">not run</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h2 id="suite-speed">Speed on the test suite</h2>
+        <p>
+          How many times per second each library validates every test of the groups all the libraries of the draft pass,
+          so that each one does the same work.
+        </p>
+        <div class="tabs segmented">
+        <div class="tab-list" role="tablist"><button role="tab" id="suite-tab-0" aria-controls="suite-panel-0" aria-selected="false">true/false</button><button role="tab" id="suite-tab-1" aria-controls="suite-panel-1" aria-selected="true">first error</button><button role="tab" id="suite-tab-2" aria-controls="suite-panel-2" aria-selected="false">all errors</button></div>
+        <div class="tab-panel" id="suite-panel-0" role="tabpanel" aria-labelledby="suite-tab-0" hidden>
+          <div class="charts">
+          <div class="chart">
+            <h3>Draft-07</h3>
+            <p class="subtitle">runs per second over 430 tests</p>
+            <div class="chart-row us"><span class="name" title="schiva (boolean)">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">177k</span></div>
+            <div class="chart-row"><span class="name" title="@exodus/schemasafe (boolean)">@exodus/schemasafe</span><div class="track"><div class="fill" style="width: 83.0%"></div></div><span class="value">147k<small>1.2&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="jsen">jsen</span><div class="track"><div class="fill" style="width: 24.0%"></div></div><span class="value">42.6k<small>4.2&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="is-my-json-valid">is-my-json-valid</span><div class="track"><div class="fill" style="width: 19.1%"></div></div><span class="value">33.9k<small>5.2&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="djv">djv</span><div class="track"><div class="fill" style="width: 3.1%"></div></div><span class="value">5.54k<small>32&times; slower</small></span></div>
+            <div class="chart-row interprets"><span class="name" title="@cfworker/json-schema">@cfworker/json-schema</span><div class="track"><div class="fill" style="width: 0.7%"></div></div><span class="value">1.22k<small>145&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="json-schema-library">json-schema-library</span><div class="track"><div class="fill" style="width: 0.6%"></div></div><span class="value">1.00k<small>177&times; slower</small></span></div>
+            <div class="chart-row interprets"><span class="name" title="jsonschema">jsonschema</span><div class="track"><div class="fill" style="width: 0.5%"></div></div><span class="value">269<small>659&times; slower</small></span></div>
+            <div class="chart-row interprets"><span class="name" title="tv4">tv4</span><div class="track"><div class="fill" style="width: 0.5%"></div></div><span class="value">95<small>1875&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="z-schema">z-schema</span><div class="track"><div class="fill" style="width: 0.5%"></div></div><span class="value">51<small>3453&times; slower</small></span></div>
+          </div>
+          <div class="chart">
+            <h3>Draft 2019-09</h3>
+            <p class="subtitle">runs per second over 1178 tests</p>
+            <div class="chart-row us"><span class="name" title="schiva (boolean)">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">30.9k</span></div>
+            <div class="chart-row"><span class="name" title="@exodus/schemasafe (boolean)">@exodus/schemasafe</span><div class="track"><div class="fill" style="width: 77.7%"></div></div><span class="value">24.0k<small>1.3&times; slower</small></span></div>
+            <div class="chart-row interprets"><span class="name" title="@cfworker/json-schema">@cfworker/json-schema</span><div class="track"><div class="fill" style="width: 0.8%"></div></div><span class="value">251<small>123&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="json-schema-library">json-schema-library</span><div class="track"><div class="fill" style="width: 0.5%"></div></div><span class="value">55<small>562&times; slower</small></span></div>
+          </div>
+          <div class="chart">
+            <h3>Draft 2020-12</h3>
+            <p class="subtitle">runs per second over 1051 tests</p>
+            <div class="chart-row us"><span class="name" title="schiva (boolean)">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">34.7k</span></div>
+            <div class="chart-row"><span class="name" title="@exodus/schemasafe (boolean)">@exodus/schemasafe</span><div class="track"><div class="fill" style="width: 79.1%"></div></div><span class="value">27.5k<small>1.3&times; slower</small></span></div>
+            <div class="chart-row interprets"><span class="name" title="@cfworker/json-schema">@cfworker/json-schema</span><div class="track"><div class="fill" style="width: 0.8%"></div></div><span class="value">276<small>126&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="json-schema-library">json-schema-library</span><div class="track"><div class="fill" style="width: 0.5%"></div></div><span class="value">74<small>469&times; slower</small></span></div>
+          </div>
+        </div>
+        </div>
+        <div class="tab-panel" id="suite-panel-1" role="tabpanel" aria-labelledby="suite-tab-1">
+          <div class="charts">
+          <div class="chart">
+            <h3>Draft-07</h3>
+            <p class="subtitle">runs per second over 430 tests</p>
+            <div class="chart-row us"><span class="name" title="schiva (first error)">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">124k</span></div>
+            <div class="chart-row"><span class="name" title="@exodus/schemasafe (first error)">@exodus/schemasafe</span><div class="track"><div class="fill" style="width: 79.2%"></div></div><span class="value">98.2k<small>1.3&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="ajv (first error)">ajv</span><div class="track"><div class="fill" style="width: 48.5%"></div></div><span class="value">60.2k<small>2.1&times; slower</small></span></div>
+          </div>
+          <div class="chart">
+            <h3>Draft 2019-09</h3>
+            <p class="subtitle">runs per second over 1178 tests</p>
+            <div class="chart-row us"><span class="name" title="schiva (first error)">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">22.1k</span></div>
+            <div class="chart-row"><span class="name" title="@exodus/schemasafe (first error)">@exodus/schemasafe</span><div class="track"><div class="fill" style="width: 67.4%"></div></div><span class="value">14.9k<small>1.5&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="ajv (first error)">ajv</span><div class="track"><div class="fill" style="width: 18.2%"></div></div><span class="value">4.02k<small>5.5&times; slower</small></span></div>
+          </div>
+          <div class="chart">
+            <h3>Draft 2020-12</h3>
+            <p class="subtitle">runs per second over 1051 tests</p>
+            <div class="chart-row us"><span class="name" title="schiva (first error)">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">25.7k</span></div>
+            <div class="chart-row"><span class="name" title="@exodus/schemasafe (first error)">@exodus/schemasafe</span><div class="track"><div class="fill" style="width: 66.5%"></div></div><span class="value">17.1k<small>1.5&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="ajv (first error)">ajv</span><div class="track"><div class="fill" style="width: 53.7%"></div></div><span class="value">13.8k<small>1.9&times; slower</small></span></div>
+          </div>
+        </div>
+        </div>
+        <div class="tab-panel" id="suite-panel-2" role="tabpanel" aria-labelledby="suite-tab-2" hidden>
+          <div class="charts">
+          <div class="chart">
+            <h3>Draft-07</h3>
+            <p class="subtitle">runs per second over 430 tests</p>
+            <div class="chart-row us"><span class="name" title="schiva (all errors)">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">101k</span></div>
+            <div class="chart-row"><span class="name" title="@exodus/schemasafe (all errors)">@exodus/schemasafe</span><div class="track"><div class="fill" style="width: 63.3%"></div></div><span class="value">63.9k<small>1.6&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="ajv (all errors)">ajv</span><div class="track"><div class="fill" style="width: 51.0%"></div></div><span class="value">51.5k<small>2.0&times; slower</small></span></div>
+          </div>
+          <div class="chart">
+            <h3>Draft 2019-09</h3>
+            <p class="subtitle">runs per second over 1178 tests</p>
+            <div class="chart-row us"><span class="name" title="schiva (all errors)">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">17.1k</span></div>
+            <div class="chart-row"><span class="name" title="@exodus/schemasafe (all errors)">@exodus/schemasafe</span><div class="track"><div class="fill" style="width: 40.0%"></div></div><span class="value">6.85k<small>2.5&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="ajv (all errors)">ajv</span><div class="track"><div class="fill" style="width: 21.1%"></div></div><span class="value">3.61k<small>4.7&times; slower</small></span></div>
+          </div>
+          <div class="chart">
+            <h3>Draft 2020-12</h3>
+            <p class="subtitle">runs per second over 1051 tests</p>
+            <div class="chart-row us"><span class="name" title="schiva (all errors)">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">19.4k</span></div>
+            <div class="chart-row"><span class="name" title="ajv (all errors)">ajv</span><div class="track"><div class="fill" style="width: 60.5%"></div></div><span class="value">11.7k<small>1.7&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="@exodus/schemasafe (all errors)">@exodus/schemasafe</span><div class="track"><div class="fill" style="width: 50.2%"></div></div><span class="value">9.72k<small>2.0&times; slower</small></span></div>
+          </div>
+        </div>
+        </div>
+      </div>
+        <p class="note">
+          ajv's speed on drafts 2019-09 and 2020-12 changes a lot from one process to the next (between about 4k and 15k
+          runs per second in our runs).
+        </p>
+        <details class="raw">
+          <summary>All the numbers</summary>
+          <div class="table-wrap">
+          <table class="numbers">
+            <thead>
+              <tr><th>Runs per second</th><th>draft-07</th><th>2019-09</th><th>2020-12</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><strong>schiva (boolean)</strong></td><td><strong>177k</strong></td><td><strong>30.9k</strong></td><td><strong>34.7k</strong></td></tr>
+              <tr><td>@exodus/schemasafe (boolean)</td><td>147k</td><td>24.0k</td><td>27.5k</td></tr>
+              <tr><td><strong>schiva (first error)</strong></td><td>124k</td><td>22.1k</td><td>25.7k</td></tr>
+              <tr><td><strong>schiva (all errors)</strong></td><td>101k</td><td>17.1k</td><td>19.4k</td></tr>
+              <tr><td>@exodus/schemasafe (first error)</td><td>98.2k</td><td>14.9k</td><td>17.1k</td></tr>
+              <tr><td>@exodus/schemasafe (all errors)</td><td>63.9k</td><td>6.85k</td><td>9.72k</td></tr>
+              <tr><td>ajv (first error)</td><td>60.2k</td><td>4.02k</td><td>13.8k</td></tr>
+              <tr><td>ajv (all errors)</td><td>51.5k</td><td>3.61k</td><td>11.7k</td></tr>
+              <tr><td>jsen</td><td>42.6k</td><td>&ndash;</td><td>&ndash;</td></tr>
+              <tr><td>is-my-json-valid</td><td>33.9k</td><td>&ndash;</td><td>&ndash;</td></tr>
+              <tr><td>djv</td><td>5.54k</td><td>&ndash;</td><td>&ndash;</td></tr>
+              <tr><td>@cfworker/json-schema</td><td>1.22k</td><td>251</td><td>276</td></tr>
+              <tr><td>json-schema-library</td><td>1.00k</td><td>55</td><td>74</td></tr>
+              <tr><td>jsonschema</td><td>269</td><td>&ndash;</td><td>&ndash;</td></tr>
+              <tr><td>tv4</td><td>95</td><td>&ndash;</td><td>&ndash;</td></tr>
+              <tr><td>z-schema</td><td>51</td><td>&ndash;</td><td>&ndash;</td></tr>
+            </tbody>
+          </table>
+        </div>
+        </details>
+
+        <h2 id="payloads">Speed on payloads</h2>
+        <p>
+          Validations per second of one value, valid and invalid, by each library that compiles the schema and gives the
+          right answer for it. The schemas are in
+          <a href="https://github.com/jesus-seijas-sp/schiva/blob/main/bench/lib/cases.js">bench/lib/cases.js</a>.
+        </p>
+        <div class="tabs segmented">
+        <div class="tab-list" role="tablist"><button role="tab" id="payloads-tab-0" aria-controls="payloads-panel-0" aria-selected="false">true/false</button><button role="tab" id="payloads-tab-1" aria-controls="payloads-panel-1" aria-selected="true">first error</button><button role="tab" id="payloads-tab-2" aria-controls="payloads-panel-2" aria-selected="false">all errors</button></div>
+        <div class="tab-panel" id="payloads-panel-0" role="tabpanel" aria-labelledby="payloads-tab-0" hidden>
+          <h3 id="moltar-strict-truefalse">moltar strict</h3>
+          <p>The flat object of typescript-runtime-type-benchmarks, with no extra keys allowed.</p>
+          <div class="charts">
+          <div class="chart">
+            <h3>moltar strict, valid</h3>
+            <p class="subtitle">validations per second</p>
+            <div class="chart-row us"><span class="name" title="schiva (boolean)">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">38.5M</span></div>
+            <div class="chart-row"><span class="name" title="is-my-json-valid">is-my-json-valid</span><div class="track"><div class="fill" style="width: 60.7%"></div></div><span class="value">23.4M<small>1.6&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="@exodus/schemasafe (boolean)">@exodus/schemasafe</span><div class="track"><div class="fill" style="width: 23.8%"></div></div><span class="value">9.18M<small>4.2&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="jsen">jsen</span><div class="track"><div class="fill" style="width: 17.4%"></div></div><span class="value">6.70M<small>5.8&times; slower</small></span></div>
+            <div class="chart-row interprets"><span class="name" title="tv4">tv4</span><div class="track"><div class="fill" style="width: 0.9%"></div></div><span class="value">333k<small>116&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="json-schema-library">json-schema-library</span><div class="track"><div class="fill" style="width: 0.6%"></div></div><span class="value">250k<small>154&times; slower</small></span></div>
+            <div class="chart-row interprets"><span class="name" title="@cfworker/json-schema">@cfworker/json-schema</span><div class="track"><div class="fill" style="width: 0.5%"></div></div><span class="value">187k<small>206&times; slower</small></span></div>
+            <div class="chart-row interprets"><span class="name" title="jsonschema">jsonschema</span><div class="track"><div class="fill" style="width: 0.5%"></div></div><span class="value">24.3k<small>1584&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="z-schema">z-schema</span><div class="track"><div class="fill" style="width: 0.5%"></div></div><span class="value">5.84k<small>6598&times; slower</small></span></div>
+          </div>
+          <div class="chart">
+            <h3>moltar strict, invalid</h3>
+            <p class="subtitle">validations per second</p>
+            <div class="chart-row us"><span class="name" title="schiva (boolean)">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">110M</span></div>
+            <div class="chart-row"><span class="name" title="is-my-json-valid">is-my-json-valid</span><div class="track"><div class="fill" style="width: 14.7%"></div></div><span class="value">16.2M<small>6.8&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="@exodus/schemasafe (boolean)">@exodus/schemasafe</span><div class="track"><div class="fill" style="width: 11.8%"></div></div><span class="value">13.1M<small>8.4&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="jsen">jsen</span><div class="track"><div class="fill" style="width: 7.2%"></div></div><span class="value">7.95M<small>14&times; slower</small></span></div>
+            <div class="chart-row interprets"><span class="name" title="@cfworker/json-schema">@cfworker/json-schema</span><div class="track"><div class="fill" style="width: 0.5%"></div></div><span class="value">164k<small>672&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="json-schema-library">json-schema-library</span><div class="track"><div class="fill" style="width: 0.5%"></div></div><span class="value">135k<small>817&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="djv">djv</span><div class="track"><div class="fill" style="width: 0.5%"></div></div><span class="value">89.3k<small>1235&times; slower</small></span></div>
+            <div class="chart-row interprets"><span class="name" title="jsonschema">jsonschema</span><div class="track"><div class="fill" style="width: 0.5%"></div></div><span class="value">23.3k<small>4745&times; slower</small></span></div>
+            <div class="chart-row interprets"><span class="name" title="tv4">tv4</span><div class="track"><div class="fill" style="width: 0.5%"></div></div><span class="value">15.8k<small>6985&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="z-schema">z-schema</span><div class="track"><div class="fill" style="width: 0.5%"></div></div><span class="value">5.50k<small>20048&times; slower</small></span></div>
+          </div>
+          </div>
+          <h3 id="order-20-lines-truefalse">order (20 lines)</h3>
+          <p>A business object with 20 order lines: pattern, enum, const, number ranges, anyOf, nullable types, uniqueItems.</p>
+          <div class="charts">
+          <div class="chart">
+            <h3>order (20 lines), valid</h3>
+            <p class="subtitle">validations per second</p>
+            <div class="chart-row us"><span class="name" title="schiva (boolean)">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">2.37M</span></div>
+            <div class="chart-row"><span class="name" title="is-my-json-valid">is-my-json-valid</span><div class="track"><div class="fill" style="width: 71.5%"></div></div><span class="value">1.69M<small>1.4&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="@exodus/schemasafe (boolean)">@exodus/schemasafe</span><div class="track"><div class="fill" style="width: 21.3%"></div></div><span class="value">504k<small>4.7&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="jsen">jsen</span><div class="track"><div class="fill" style="width: 6.8%"></div></div><span class="value">161k<small>15&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="json-schema-library">json-schema-library</span><div class="track"><div class="fill" style="width: 0.6%"></div></div><span class="value">14.0k<small>169&times; slower</small></span></div>
+            <div class="chart-row interprets"><span class="name" title="@cfworker/json-schema">@cfworker/json-schema</span><div class="track"><div class="fill" style="width: 0.5%"></div></div><span class="value">8.58k<small>276&times; slower</small></span></div>
+            <div class="chart-row interprets"><span class="name" title="jsonschema">jsonschema</span><div class="track"><div class="fill" style="width: 0.5%"></div></div><span class="value">3.00k<small>789&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="z-schema">z-schema</span><div class="track"><div class="fill" style="width: 0.5%"></div></div><span class="value">2.04k<small>1160&times; slower</small></span></div>
+            <div class="chart-row interprets"><span class="name" title="tv4">tv4</span><div class="track"><div class="fill" style="width: 0.5%"></div></div><span class="value">1.36k<small>1738&times; slower</small></span></div>
+          </div>
+          <div class="chart">
+            <h3>order (20 lines), invalid</h3>
+            <p class="subtitle">validations per second</p>
+            <div class="chart-row us"><span class="name" title="schiva (boolean)">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">17.0M</span></div>
+            <div class="chart-row"><span class="name" title="@exodus/schemasafe (boolean)">@exodus/schemasafe</span><div class="track"><div class="fill" style="width: 44.1%"></div></div><span class="value">7.49M<small>2.3&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="jsen">jsen</span><div class="track"><div class="fill" style="width: 28.8%"></div></div><span class="value">4.89M<small>3.5&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="is-my-json-valid">is-my-json-valid</span><div class="track"><div class="fill" style="width: 8.9%"></div></div><span class="value">1.51M<small>11&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="djv">djv</span><div class="track"><div class="fill" style="width: 0.6%"></div></div><span class="value">99.6k<small>171&times; slower</small></span></div>
+            <div class="chart-row interprets"><span class="name" title="tv4">tv4</span><div class="track"><div class="fill" style="width: 0.5%"></div></div><span class="value">16.7k<small>1016&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="json-schema-library">json-schema-library</span><div class="track"><div class="fill" style="width: 0.5%"></div></div><span class="value">12.8k<small>1332&times; slower</small></span></div>
+            <div class="chart-row interprets"><span class="name" title="@cfworker/json-schema">@cfworker/json-schema</span><div class="track"><div class="fill" style="width: 0.5%"></div></div><span class="value">8.50k<small>1998&times; slower</small></span></div>
+            <div class="chart-row interprets"><span class="name" title="jsonschema">jsonschema</span><div class="track"><div class="fill" style="width: 0.5%"></div></div><span class="value">2.97k<small>5713&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="z-schema">z-schema</span><div class="track"><div class="fill" style="width: 0.5%"></div></div><span class="value">1.94k<small>8737&times; slower</small></span></div>
+          </div>
+          </div>
+          <h3 id="order-2020-12-unevaluatedproperties-20-lines-truefalse">order 2020-12, unevaluatedProperties (20 lines)</h3>
+          <p>The same order in draft 2020-12, with $ref, allOf and unevaluatedProperties.</p>
+          <div class="charts">
+          <div class="chart">
+            <h3>order 2020-12, unevaluatedProperties (20 lines), valid</h3>
+            <p class="subtitle">validations per second</p>
+            <div class="chart-row us"><span class="name" title="schiva (boolean)">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">2.46M</span></div>
+            <div class="chart-row"><span class="name" title="@exodus/schemasafe (boolean)">@exodus/schemasafe</span><div class="track"><div class="fill" style="width: 23.2%"></div></div><span class="value">572k<small>4.3&times; slower</small></span></div>
+            <div class="chart-row interprets"><span class="name" title="@cfworker/json-schema">@cfworker/json-schema</span><div class="track"><div class="fill" style="width: 0.5%"></div></div><span class="value">7.97k<small>309&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="json-schema-library">json-schema-library</span><div class="track"><div class="fill" style="width: 0.5%"></div></div><span class="value">730<small>3376&times; slower</small></span></div>
+          </div>
+          <div class="chart">
+            <h3>order 2020-12, unevaluatedProperties (20 lines), invalid</h3>
+            <p class="subtitle">validations per second</p>
+            <div class="chart-row us"><span class="name" title="schiva (boolean)">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">36.7M</span></div>
+            <div class="chart-row"><span class="name" title="@exodus/schemasafe (boolean)">@exodus/schemasafe</span><div class="track"><div class="fill" style="width: 29.8%"></div></div><span class="value">10.9M<small>3.4&times; slower</small></span></div>
+            <div class="chart-row interprets"><span class="name" title="@cfworker/json-schema">@cfworker/json-schema</span><div class="track"><div class="fill" style="width: 0.5%"></div></div><span class="value">7.84k<small>4683&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="json-schema-library">json-schema-library</span><div class="track"><div class="fill" style="width: 0.5%"></div></div><span class="value">464<small>79214&times; slower</small></span></div>
+          </div>
+          </div>
+          <h3 id="payment-2020-12-oneof-unevaluatedproperties-truefalse">payment 2020-12, oneOf + unevaluatedProperties</h3>
+          <p>A payment whose variant (oneOf) decides the keys it may have (unevaluatedProperties).</p>
+          <div class="charts">
+          <div class="chart">
+            <h3>payment 2020-12, oneOf + unevaluatedProperties, valid</h3>
+            <p class="subtitle">validations per second</p>
+            <div class="chart-row us"><span class="name" title="schiva (boolean)">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">16.2M</span></div>
+            <div class="chart-row"><span class="name" title="@exodus/schemasafe (boolean)">@exodus/schemasafe</span><div class="track"><div class="fill" style="width: 43.9%"></div></div><span class="value">7.12M<small>2.3&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="json-schema-library">json-schema-library</span><div class="track"><div class="fill" style="width: 0.9%"></div></div><span class="value">140k<small>116&times; slower</small></span></div>
+            <div class="chart-row interprets"><span class="name" title="@cfworker/json-schema">@cfworker/json-schema</span><div class="track"><div class="fill" style="width: 0.6%"></div></div><span class="value">103k<small>158&times; slower</small></span></div>
+          </div>
+          <div class="chart">
+            <h3>payment 2020-12, oneOf + unevaluatedProperties, invalid</h3>
+            <p class="subtitle">validations per second</p>
+            <div class="chart-row us"><span class="name" title="schiva (boolean)">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">15.5M</span></div>
+            <div class="chart-row"><span class="name" title="@exodus/schemasafe (boolean)">@exodus/schemasafe</span><div class="track"><div class="fill" style="width: 38.8%"></div></div><span class="value">6.01M<small>2.6&times; slower</small></span></div>
+            <div class="chart-row interprets"><span class="name" title="@cfworker/json-schema">@cfworker/json-schema</span><div class="track"><div class="fill" style="width: 0.6%"></div></div><span class="value">90.9k<small>170&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="json-schema-library">json-schema-library</span><div class="track"><div class="fill" style="width: 0.5%"></div></div><span class="value">8.42k<small>1840&times; slower</small></span></div>
+          </div>
+          </div>
+          <h3 id="shapes-discriminator-8-kinds-truefalse">shapes, discriminator (8 kinds)</h3>
+          <p>A shape among 8, picked by an OpenAPI discriminator (ajv with its option discriminator: true).</p>
+          <div class="charts">
+          <div class="chart">
+            <h3>shapes, discriminator (8 kinds), valid</h3>
+            <p class="subtitle">validations per second</p>
+            <div class="chart-row us"><span class="name" title="schiva (boolean)">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">121M</span></div>
+            <div class="chart-row"><span class="name" title="is-my-json-valid">is-my-json-valid</span><div class="track"><div class="fill" style="width: 70.2%"></div></div><span class="value">85.1M<small>1.4&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="@exodus/schemasafe (boolean)">@exodus/schemasafe</span><div class="track"><div class="fill" style="width: 25.5%"></div></div><span class="value">30.9M<small>3.9&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="jsen">jsen</span><div class="track"><div class="fill" style="width: 1.4%"></div></div><span class="value">1.68M<small>72&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="djv">djv</span><div class="track"><div class="fill" style="width: 0.5%"></div></div><span class="value">85.5k<small>1418&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="json-schema-library">json-schema-library</span><div class="track"><div class="fill" style="width: 0.5%"></div></div><span class="value">37.9k<small>3199&times; slower</small></span></div>
+            <div class="chart-row interprets"><span class="name" title="@cfworker/json-schema">@cfworker/json-schema</span><div class="track"><div class="fill" style="width: 0.5%"></div></div><span class="value">34.2k<small>3550&times; slower</small></span></div>
+            <div class="chart-row interprets"><span class="name" title="jsonschema">jsonschema</span><div class="track"><div class="fill" style="width: 0.5%"></div></div><span class="value">6.47k<small>18742&times; slower</small></span></div>
+            <div class="chart-row interprets"><span class="name" title="tv4">tv4</span><div class="track"><div class="fill" style="width: 0.5%"></div></div><span class="value">2.98k<small>40686&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="z-schema">z-schema</span><div class="track"><div class="fill" style="width: 0.5%"></div></div><span class="value">1.67k<small>72592&times; slower</small></span></div>
+          </div>
+          <div class="chart">
+            <h3>shapes, discriminator (8 kinds), invalid</h3>
+            <p class="subtitle">validations per second</p>
+            <div class="chart-row us"><span class="name" title="schiva (boolean)">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">162M</span></div>
+            <div class="chart-row"><span class="name" title="@exodus/schemasafe (boolean)">@exodus/schemasafe</span><div class="track"><div class="fill" style="width: 25.5%"></div></div><span class="value">41.3M<small>3.9&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="is-my-json-valid">is-my-json-valid</span><div class="track"><div class="fill" style="width: 23.9%"></div></div><span class="value">38.7M<small>4.2&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="jsen">jsen</span><div class="track"><div class="fill" style="width: 1.1%"></div></div><span class="value">1.76M<small>92&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="djv">djv</span><div class="track"><div class="fill" style="width: 0.5%"></div></div><span class="value">109k<small>1487&times; slower</small></span></div>
+            <div class="chart-row interprets"><span class="name" title="@cfworker/json-schema">@cfworker/json-schema</span><div class="track"><div class="fill" style="width: 0.5%"></div></div><span class="value">35.8k<small>4529&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="json-schema-library">json-schema-library</span><div class="track"><div class="fill" style="width: 0.5%"></div></div><span class="value">26.0k<small>6239&times; slower</small></span></div>
+            <div class="chart-row interprets"><span class="name" title="jsonschema">jsonschema</span><div class="track"><div class="fill" style="width: 0.5%"></div></div><span class="value">6.25k<small>25914&times; slower</small></span></div>
+            <div class="chart-row interprets"><span class="name" title="tv4">tv4</span><div class="track"><div class="fill" style="width: 0.5%"></div></div><span class="value">2.47k<small>65628&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="z-schema">z-schema</span><div class="track"><div class="fill" style="width: 0.5%"></div></div><span class="value">1.64k<small>99069&times; slower</small></span></div>
+          </div>
+          </div>
+        </div>
+        <div class="tab-panel" id="payloads-panel-1" role="tabpanel" aria-labelledby="payloads-tab-1">
+          <h3 id="moltar-strict-firsterror">moltar strict</h3>
+          <p>The flat object of typescript-runtime-type-benchmarks, with no extra keys allowed.</p>
+          <div class="charts">
+          <div class="chart">
+            <h3>moltar strict, valid</h3>
+            <p class="subtitle">validations per second</p>
+            <div class="chart-row us"><span class="name" title="schiva (first error)">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">33.1M</span></div>
+            <div class="chart-row"><span class="name" title="ajv (first error)">ajv</span><div class="track"><div class="fill" style="width: 87.9%"></div></div><span class="value">29.1M<small>1.1&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="@exodus/schemasafe (first error)">@exodus/schemasafe</span><div class="track"><div class="fill" style="width: 27.4%"></div></div><span class="value">9.06M<small>3.7&times; slower</small></span></div>
+          </div>
+          <div class="chart">
+            <h3>moltar strict, invalid</h3>
+            <p class="subtitle">validations per second</p>
+            <div class="chart-row us"><span class="name" title="schiva (first error)">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">78.9M</span></div>
+            <div class="chart-row"><span class="name" title="ajv (first error)">ajv</span><div class="track"><div class="fill" style="width: 45.6%"></div></div><span class="value">36.0M<small>2.2&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="@exodus/schemasafe (first error)">@exodus/schemasafe</span><div class="track"><div class="fill" style="width: 14.9%"></div></div><span class="value">11.7M<small>6.7&times; slower</small></span></div>
+          </div>
+          </div>
+          <h3 id="order-20-lines-firsterror">order (20 lines)</h3>
+          <p>A business object with 20 order lines: pattern, enum, const, number ranges, anyOf, nullable types, uniqueItems.</p>
+          <div class="charts">
+          <div class="chart">
+            <h3>order (20 lines), valid</h3>
+            <p class="subtitle">validations per second</p>
+            <div class="chart-row us"><span class="name" title="schiva (first error)">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">2.16M</span></div>
+            <div class="chart-row"><span class="name" title="ajv (first error)">ajv</span><div class="track"><div class="fill" style="width: 34.1%"></div></div><span class="value">737k<small>2.9&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="@exodus/schemasafe (first error)">@exodus/schemasafe</span><div class="track"><div class="fill" style="width: 25.3%"></div></div><span class="value">546k<small>4.0&times; slower</small></span></div>
+          </div>
+          <div class="chart">
+            <h3>order (20 lines), invalid</h3>
+            <p class="subtitle">validations per second</p>
+            <div class="chart-row us"><span class="name" title="schiva (first error)">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">17.1M</span></div>
+            <div class="chart-row"><span class="name" title="ajv (first error)">ajv</span><div class="track"><div class="fill" style="width: 71.6%"></div></div><span class="value">12.2M<small>1.4&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="@exodus/schemasafe (first error)">@exodus/schemasafe</span><div class="track"><div class="fill" style="width: 42.2%"></div></div><span class="value">7.20M<small>2.4&times; slower</small></span></div>
+          </div>
+          </div>
+          <h3 id="order-2020-12-unevaluatedproperties-20-lines-firsterror">order 2020-12, unevaluatedProperties (20 lines)</h3>
+          <p>The same order in draft 2020-12, with $ref, allOf and unevaluatedProperties.</p>
+          <div class="charts">
+          <div class="chart">
+            <h3>order 2020-12, unevaluatedProperties (20 lines), valid</h3>
+            <p class="subtitle">validations per second</p>
+            <div class="chart-row us"><span class="name" title="schiva (first error)">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">2.32M</span></div>
+            <div class="chart-row"><span class="name" title="ajv (first error)">ajv</span><div class="track"><div class="fill" style="width: 28.3%"></div></div><span class="value">657k<small>3.5&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="@exodus/schemasafe (first error)">@exodus/schemasafe</span><div class="track"><div class="fill" style="width: 23.6%"></div></div><span class="value">549k<small>4.2&times; slower</small></span></div>
+          </div>
+          <div class="chart">
+            <h3>order 2020-12, unevaluatedProperties (20 lines), invalid</h3>
+            <p class="subtitle">validations per second</p>
+            <div class="chart-row us"><span class="name" title="schiva (first error)">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">31.7M</span></div>
+            <div class="chart-row"><span class="name" title="ajv (first error)">ajv</span><div class="track"><div class="fill" style="width: 47.2%"></div></div><span class="value">15.0M<small>2.1&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="@exodus/schemasafe (first error)">@exodus/schemasafe</span><div class="track"><div class="fill" style="width: 31.7%"></div></div><span class="value">10.1M<small>3.2&times; slower</small></span></div>
+          </div>
+          </div>
+          <h3 id="payment-2020-12-oneof-unevaluatedproperties-firsterror">payment 2020-12, oneOf + unevaluatedProperties</h3>
+          <p>A payment whose variant (oneOf) decides the keys it may have (unevaluatedProperties).</p>
+          <div class="charts">
+          <div class="chart">
+            <h3>payment 2020-12, oneOf + unevaluatedProperties, valid</h3>
+            <p class="subtitle">validations per second</p>
+            <div class="chart-row us"><span class="name" title="schiva (first error)">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">15.2M</span></div>
+            <div class="chart-row"><span class="name" title="ajv (first error)">ajv</span><div class="track"><div class="fill" style="width: 57.8%"></div></div><span class="value">8.81M<small>1.7&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="@exodus/schemasafe (first error)">@exodus/schemasafe</span><div class="track"><div class="fill" style="width: 47.3%"></div></div><span class="value">7.21M<small>2.1&times; slower</small></span></div>
+          </div>
+          <div class="chart">
+            <h3>payment 2020-12, oneOf + unevaluatedProperties, invalid</h3>
+            <p class="subtitle">validations per second</p>
+            <div class="chart-row us"><span class="name" title="schiva (first error)">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">14.5M</span></div>
+            <div class="chart-row"><span class="name" title="ajv (first error)">ajv</span><div class="track"><div class="fill" style="width: 52.1%"></div></div><span class="value">7.54M<small>1.9&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="@exodus/schemasafe (first error)">@exodus/schemasafe</span><div class="track"><div class="fill" style="width: 33.8%"></div></div><span class="value">4.89M<small>3.0&times; slower</small></span></div>
+          </div>
+          </div>
+          <h3 id="shapes-discriminator-8-kinds-firsterror">shapes, discriminator (8 kinds)</h3>
+          <p>A shape among 8, picked by an OpenAPI discriminator (ajv with its option discriminator: true).</p>
+          <div class="charts">
+          <div class="chart">
+            <h3>shapes, discriminator (8 kinds), valid</h3>
+            <p class="subtitle">validations per second</p>
+            <div class="chart-row us"><span class="name" title="schiva (first error)">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">117M</span></div>
+            <div class="chart-row"><span class="name" title="ajv (first error)">ajv</span><div class="track"><div class="fill" style="width: 38.3%"></div></div><span class="value">44.8M<small>2.6&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="@exodus/schemasafe (first error)">@exodus/schemasafe</span><div class="track"><div class="fill" style="width: 25.5%"></div></div><span class="value">29.8M<small>3.9&times; slower</small></span></div>
+          </div>
+          <div class="chart">
+            <h3>shapes, discriminator (8 kinds), invalid</h3>
+            <p class="subtitle">validations per second</p>
+            <div class="chart-row us"><span class="name" title="schiva (first error)">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">122M</span></div>
+            <div class="chart-row"><span class="name" title="ajv (first error)">ajv</span><div class="track"><div class="fill" style="width: 30.4%"></div></div><span class="value">37.1M<small>3.3&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="@exodus/schemasafe (first error)">@exodus/schemasafe</span><div class="track"><div class="fill" style="width: 26.8%"></div></div><span class="value">32.7M<small>3.7&times; slower</small></span></div>
+          </div>
+          </div>
+        </div>
+        <div class="tab-panel" id="payloads-panel-2" role="tabpanel" aria-labelledby="payloads-tab-2" hidden>
+          <h3 id="moltar-strict-allerrors">moltar strict</h3>
+          <p>The flat object of typescript-runtime-type-benchmarks, with no extra keys allowed.</p>
+          <div class="charts">
+          <div class="chart">
+            <h3>moltar strict, valid</h3>
+            <p class="subtitle">validations per second</p>
+            <div class="chart-row us"><span class="name" title="schiva (all errors)">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">30.6M</span></div>
+            <div class="chart-row"><span class="name" title="ajv (all errors)">ajv</span><div class="track"><div class="fill" style="width: 91.2%"></div></div><span class="value">27.9M<small>1.1&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="@exodus/schemasafe (all errors)">@exodus/schemasafe</span><div class="track"><div class="fill" style="width: 18.5%"></div></div><span class="value">5.65M<small>5.4&times; slower</small></span></div>
+          </div>
+          <div class="chart">
+            <h3>moltar strict, invalid</h3>
+            <p class="subtitle">validations per second</p>
+            <div class="chart-row us"><span class="name" title="schiva (all errors)">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">20.8M</span></div>
+            <div class="chart-row"><span class="name" title="ajv (all errors)">ajv</span><div class="track"><div class="fill" style="width: 84.2%"></div></div><span class="value">17.5M<small>1.2&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="@exodus/schemasafe (all errors)">@exodus/schemasafe</span><div class="track"><div class="fill" style="width: 21.6%"></div></div><span class="value">4.49M<small>4.6&times; slower</small></span></div>
+          </div>
+          </div>
+          <h3 id="order-20-lines-allerrors">order (20 lines)</h3>
+          <p>A business object with 20 order lines: pattern, enum, const, number ranges, anyOf, nullable types, uniqueItems.</p>
+          <div class="charts">
+          <div class="chart">
+            <h3>order (20 lines), valid</h3>
+            <p class="subtitle">validations per second</p>
+            <div class="chart-row us"><span class="name" title="schiva (all errors)">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">2.23M</span></div>
+            <div class="chart-row"><span class="name" title="ajv (all errors)">ajv</span><div class="track"><div class="fill" style="width: 32.0%"></div></div><span class="value">712k<small>3.1&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="@exodus/schemasafe (all errors)">@exodus/schemasafe</span><div class="track"><div class="fill" style="width: 16.2%"></div></div><span class="value">361k<small>6.2&times; slower</small></span></div>
+          </div>
+          <div class="chart">
+            <h3>order (20 lines), invalid</h3>
+            <p class="subtitle">validations per second</p>
+            <div class="chart-row us"><span class="name" title="schiva (all errors)">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">1.86M</span></div>
+            <div class="chart-row"><span class="name" title="ajv (all errors)">ajv</span><div class="track"><div class="fill" style="width: 23.5%"></div></div><span class="value">439k<small>4.2&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="@exodus/schemasafe (all errors)">@exodus/schemasafe</span><div class="track"><div class="fill" style="width: 17.3%"></div></div><span class="value">323k<small>5.8&times; slower</small></span></div>
+          </div>
+          </div>
+          <h3 id="order-2020-12-unevaluatedproperties-20-lines-allerrors">order 2020-12, unevaluatedProperties (20 lines)</h3>
+          <p>The same order in draft 2020-12, with $ref, allOf and unevaluatedProperties.</p>
+          <div class="charts">
+          <div class="chart">
+            <h3>order 2020-12, unevaluatedProperties (20 lines), valid</h3>
+            <p class="subtitle">validations per second</p>
+            <div class="chart-row us"><span class="name" title="schiva (all errors)">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">2.29M</span></div>
+            <div class="chart-row"><span class="name" title="ajv (all errors)">ajv</span><div class="track"><div class="fill" style="width: 28.6%"></div></div><span class="value">655k<small>3.5&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="@exodus/schemasafe (all errors)">@exodus/schemasafe</span><div class="track"><div class="fill" style="width: 14.0%"></div></div><span class="value">320k<small>7.2&times; slower</small></span></div>
+          </div>
+          <div class="chart">
+            <h3>order 2020-12, unevaluatedProperties (20 lines), invalid</h3>
+            <p class="subtitle">validations per second</p>
+            <div class="chart-row us"><span class="name" title="schiva (all errors)">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">1.53M</span></div>
+            <div class="chart-row"><span class="name" title="ajv (all errors)">ajv</span><div class="track"><div class="fill" style="width: 24.8%"></div></div><span class="value">381k<small>4.0&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="@exodus/schemasafe (all errors)">@exodus/schemasafe</span><div class="track"><div class="fill" style="width: 18.3%"></div></div><span class="value">281k<small>5.5&times; slower</small></span></div>
+          </div>
+          </div>
+          <h3 id="payment-2020-12-oneof-unevaluatedproperties-allerrors">payment 2020-12, oneOf + unevaluatedProperties</h3>
+          <p>A payment whose variant (oneOf) decides the keys it may have (unevaluatedProperties).</p>
+          <div class="charts">
+          <div class="chart">
+            <h3>payment 2020-12, oneOf + unevaluatedProperties, valid</h3>
+            <p class="subtitle">validations per second</p>
+            <div class="chart-row us"><span class="name" title="schiva (all errors)">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">15.3M</span></div>
+            <div class="chart-row"><span class="name" title="ajv (all errors)">ajv</span><div class="track"><div class="fill" style="width: 52.4%"></div></div><span class="value">8.00M<small>1.9&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="@exodus/schemasafe (all errors)">@exodus/schemasafe</span><div class="track"><div class="fill" style="width: 27.7%"></div></div><span class="value">4.23M<small>3.6&times; slower</small></span></div>
+          </div>
+          <div class="chart">
+            <h3>payment 2020-12, oneOf + unevaluatedProperties, invalid</h3>
+            <p class="subtitle">validations per second</p>
+            <div class="chart-row us"><span class="name" title="schiva (all errors)">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">13.8M</span></div>
+            <div class="chart-row"><span class="name" title="ajv (all errors)">ajv</span><div class="track"><div class="fill" style="width: 44.8%"></div></div><span class="value">6.21M<small>2.2&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="@exodus/schemasafe (all errors)">@exodus/schemasafe</span><div class="track"><div class="fill" style="width: 21.6%"></div></div><span class="value">2.99M<small>4.6&times; slower</small></span></div>
+          </div>
+          </div>
+          <h3 id="shapes-discriminator-8-kinds-allerrors">shapes, discriminator (8 kinds)</h3>
+          <p>A shape among 8, picked by an OpenAPI discriminator (ajv with its option discriminator: true).</p>
+          <div class="charts">
+          <div class="chart">
+            <h3>shapes, discriminator (8 kinds), valid</h3>
+            <p class="subtitle">validations per second</p>
+            <div class="chart-row us"><span class="name" title="schiva (all errors)">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">105M</span></div>
+            <div class="chart-row"><span class="name" title="ajv (all errors)">ajv</span><div class="track"><div class="fill" style="width: 42.6%"></div></div><span class="value">44.7M<small>2.3&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="@exodus/schemasafe (all errors)">@exodus/schemasafe</span><div class="track"><div class="fill" style="width: 16.1%"></div></div><span class="value">16.8M<small>6.2&times; slower</small></span></div>
+          </div>
+          <div class="chart">
+            <h3>shapes, discriminator (8 kinds), invalid</h3>
+            <p class="subtitle">validations per second</p>
+            <div class="chart-row us"><span class="name" title="schiva (all errors)">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">44.3M</span></div>
+            <div class="chart-row"><span class="name" title="ajv (all errors)">ajv</span><div class="track"><div class="fill" style="width: 44.4%"></div></div><span class="value">19.7M<small>2.2&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="@exodus/schemasafe (all errors)">@exodus/schemasafe</span><div class="track"><div class="fill" style="width: 30.0%"></div></div><span class="value">13.3M<small>3.3&times; slower</small></span></div>
+          </div>
+          </div>
+        </div>
+      </div>
+        <details class="raw">
+          <summary>All the numbers</summary>
+          <h3 id="moltar-strict">moltar strict</h3>
+        <p>The flat object of typescript-runtime-type-benchmarks, with no extra keys allowed.</p>
+        <div class="table-wrap">
+          <table class="numbers">
+            <thead>
+              <tr><th>Validations per second</th><th>valid</th><th>invalid</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><strong>schiva (boolean)</strong></td><td><strong>38.5M</strong></td><td><strong>110M</strong></td></tr>
+              <tr><td><strong>schiva (first error)</strong></td><td>33.1M</td><td>78.9M</td></tr>
+              <tr><td><strong>schiva (all errors)</strong></td><td>30.6M</td><td>20.8M</td></tr>
+              <tr><td>ajv (first error)</td><td>29.1M</td><td>36.0M</td></tr>
+              <tr><td>ajv (all errors)</td><td>27.9M</td><td>17.5M</td></tr>
+              <tr><td>is-my-json-valid</td><td>23.4M</td><td>16.2M</td></tr>
+              <tr><td>@exodus/schemasafe (boolean)</td><td>9.18M</td><td>13.1M</td></tr>
+              <tr><td>@exodus/schemasafe (first error)</td><td>9.06M</td><td>11.7M</td></tr>
+              <tr><td>jsen</td><td>6.70M</td><td>7.95M</td></tr>
+              <tr><td>@exodus/schemasafe (all errors)</td><td>5.65M</td><td>4.49M</td></tr>
+              <tr><td>tv4</td><td>333k</td><td>15.8k</td></tr>
+              <tr><td>json-schema-library</td><td>250k</td><td>135k</td></tr>
+              <tr><td>@cfworker/json-schema</td><td>187k</td><td>164k</td></tr>
+              <tr><td>jsonschema</td><td>24.3k</td><td>23.3k</td></tr>
+              <tr><td>z-schema</td><td>5.84k</td><td>5.50k</td></tr>
+              <tr><td>djv</td><td>&ndash;</td><td>89.3k</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="note">Left out: djv: wrong result (false).</p>
+        <h3 id="order-20-lines">order (20 lines)</h3>
+        <p>A business object with 20 order lines: pattern, enum, const, number ranges, anyOf, nullable types, uniqueItems.</p>
+        <div class="table-wrap">
+          <table class="numbers">
+            <thead>
+              <tr><th>Validations per second</th><th>valid</th><th>invalid</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><strong>schiva (boolean)</strong></td><td><strong>2.37M</strong></td><td>17.0M</td></tr>
+              <tr><td><strong>schiva (all errors)</strong></td><td>2.23M</td><td>1.86M</td></tr>
+              <tr><td><strong>schiva (first error)</strong></td><td>2.16M</td><td><strong>17.1M</strong></td></tr>
+              <tr><td>is-my-json-valid</td><td>1.69M</td><td>1.51M</td></tr>
+              <tr><td>ajv (first error)</td><td>737k</td><td>12.2M</td></tr>
+              <tr><td>ajv (all errors)</td><td>712k</td><td>439k</td></tr>
+              <tr><td>@exodus/schemasafe (first error)</td><td>546k</td><td>7.20M</td></tr>
+              <tr><td>@exodus/schemasafe (boolean)</td><td>504k</td><td>7.49M</td></tr>
+              <tr><td>@exodus/schemasafe (all errors)</td><td>361k</td><td>323k</td></tr>
+              <tr><td>jsen</td><td>161k</td><td>4.89M</td></tr>
+              <tr><td>json-schema-library</td><td>14.0k</td><td>12.8k</td></tr>
+              <tr><td>@cfworker/json-schema</td><td>8.58k</td><td>8.50k</td></tr>
+              <tr><td>jsonschema</td><td>3.00k</td><td>2.97k</td></tr>
+              <tr><td>z-schema</td><td>2.04k</td><td>1.94k</td></tr>
+              <tr><td>tv4</td><td>1.36k</td><td>16.7k</td></tr>
+              <tr><td>djv</td><td>&ndash;</td><td>99.6k</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="note">Left out: djv: wrong result (false).</p>
+        <h3 id="order-2020-12-unevaluatedproperties-20-lines">order 2020-12, unevaluatedProperties (20 lines)</h3>
+        <p>The same order in draft 2020-12, with $ref, allOf and unevaluatedProperties.</p>
+        <div class="table-wrap">
+          <table class="numbers">
+            <thead>
+              <tr><th>Validations per second</th><th>valid</th><th>invalid</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><strong>schiva (boolean)</strong></td><td><strong>2.46M</strong></td><td><strong>36.7M</strong></td></tr>
+              <tr><td><strong>schiva (first error)</strong></td><td>2.32M</td><td>31.7M</td></tr>
+              <tr><td><strong>schiva (all errors)</strong></td><td>2.29M</td><td>1.53M</td></tr>
+              <tr><td>ajv (first error)</td><td>657k</td><td>15.0M</td></tr>
+              <tr><td>ajv (all errors)</td><td>655k</td><td>381k</td></tr>
+              <tr><td>@exodus/schemasafe (boolean)</td><td>572k</td><td>10.9M</td></tr>
+              <tr><td>@exodus/schemasafe (first error)</td><td>549k</td><td>10.1M</td></tr>
+              <tr><td>@exodus/schemasafe (all errors)</td><td>320k</td><td>281k</td></tr>
+              <tr><td>@cfworker/json-schema</td><td>7.97k</td><td>7.84k</td></tr>
+              <tr><td>json-schema-library</td><td>730</td><td>464</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3 id="payment-2020-12-oneof-unevaluatedproperties">payment 2020-12, oneOf + unevaluatedProperties</h3>
+        <p>A payment whose variant (oneOf) decides the keys it may have (unevaluatedProperties).</p>
+        <div class="table-wrap">
+          <table class="numbers">
+            <thead>
+              <tr><th>Validations per second</th><th>valid</th><th>invalid</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><strong>schiva (boolean)</strong></td><td><strong>16.2M</strong></td><td><strong>15.5M</strong></td></tr>
+              <tr><td><strong>schiva (all errors)</strong></td><td>15.3M</td><td>13.8M</td></tr>
+              <tr><td><strong>schiva (first error)</strong></td><td>15.2M</td><td>14.5M</td></tr>
+              <tr><td>ajv (first error)</td><td>8.81M</td><td>7.54M</td></tr>
+              <tr><td>ajv (all errors)</td><td>8.00M</td><td>6.21M</td></tr>
+              <tr><td>@exodus/schemasafe (first error)</td><td>7.21M</td><td>4.89M</td></tr>
+              <tr><td>@exodus/schemasafe (boolean)</td><td>7.12M</td><td>6.01M</td></tr>
+              <tr><td>@exodus/schemasafe (all errors)</td><td>4.23M</td><td>2.99M</td></tr>
+              <tr><td>json-schema-library</td><td>140k</td><td>8.42k</td></tr>
+              <tr><td>@cfworker/json-schema</td><td>103k</td><td>90.9k</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3 id="shapes-discriminator-8-kinds">shapes, discriminator (8 kinds)</h3>
+        <p>A shape among 8, picked by an OpenAPI discriminator (ajv with its option discriminator: true).</p>
+        <div class="table-wrap">
+          <table class="numbers">
+            <thead>
+              <tr><th>Validations per second</th><th>valid</th><th>invalid</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><strong>schiva (boolean)</strong></td><td><strong>121M</strong></td><td><strong>162M</strong></td></tr>
+              <tr><td><strong>schiva (first error)</strong></td><td>117M</td><td>122M</td></tr>
+              <tr><td><strong>schiva (all errors)</strong></td><td>105M</td><td>44.3M</td></tr>
+              <tr><td>is-my-json-valid</td><td>85.1M</td><td>38.7M</td></tr>
+              <tr><td>ajv (first error)</td><td>44.8M</td><td>37.1M</td></tr>
+              <tr><td>ajv (all errors)</td><td>44.7M</td><td>19.7M</td></tr>
+              <tr><td>@exodus/schemasafe (boolean)</td><td>30.9M</td><td>41.3M</td></tr>
+              <tr><td>@exodus/schemasafe (first error)</td><td>29.8M</td><td>32.7M</td></tr>
+              <tr><td>@exodus/schemasafe (all errors)</td><td>16.8M</td><td>13.3M</td></tr>
+              <tr><td>jsen</td><td>1.68M</td><td>1.76M</td></tr>
+              <tr><td>djv</td><td>85.5k</td><td>109k</td></tr>
+              <tr><td>json-schema-library</td><td>37.9k</td><td>26.0k</td></tr>
+              <tr><td>@cfworker/json-schema</td><td>34.2k</td><td>35.8k</td></tr>
+              <tr><td>jsonschema</td><td>6.47k</td><td>6.25k</td></tr>
+              <tr><td>tv4</td><td>2.98k</td><td>2.47k</td></tr>
+              <tr><td>z-schema</td><td>1.67k</td><td>1.64k</td></tr>
+            </tbody>
+          </table>
+        </div>
+        </details>
+
+        <h2 id="compiling">Compiling</h2>
+        <p>
+          Schemas per second, from the order schema to a function that validates it. jsonschema, tv4 and
+          @cfworker/json-schema interpret the schema instead of compiling it: their "compiling" only builds an object,
+          and they pay for it at every validation, which is why they are the slowest on the payloads above.
+        </p>
+        <div class="legend"><span class="us">schiva</span><span>compiles the schema</span><span class="interprets">interprets it at every validation</span></div>
+        <div class="charts">
+          <div class="chart">
+            <h3>Compiling the order schema</h3>
+            <p class="subtitle">schemas per second, first error</p>
+            <div class="chart-row interprets"><span class="name" title="jsonschema">jsonschema</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">80.4k</span></div>
+            <div class="chart-row interprets"><span class="name" title="tv4">tv4</span><div class="track"><div class="fill" style="width: 99.0%"></div></div><span class="value">79.6k</span></div>
+            <div class="chart-row interprets"><span class="name" title="@cfworker/json-schema">@cfworker/json-schema</span><div class="track"><div class="fill" style="width: 39.4%"></div></div><span class="value">31.6k</span></div>
+            <div class="chart-row us"><span class="name" title="schiva (first error)">schiva</span><div class="track"><div class="fill" style="width: 10.5%"></div></div><span class="value">8.41k</span></div>
+            <div class="chart-row"><span class="name" title="json-schema-library">json-schema-library</span><div class="track"><div class="fill" style="width: 10.0%"></div></div><span class="value">8.02k</span></div>
+            <div class="chart-row"><span class="name" title="jsen">jsen</span><div class="track"><div class="fill" style="width: 6.7%"></div></div><span class="value">5.37k<small>1.6&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="is-my-json-valid">is-my-json-valid</span><div class="track"><div class="fill" style="width: 4.4%"></div></div><span class="value">3.53k<small>2.4&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="djv">djv</span><div class="track"><div class="fill" style="width: 4.3%"></div></div><span class="value">3.47k<small>2.4&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="z-schema">z-schema</span><div class="track"><div class="fill" style="width: 1.5%"></div></div><span class="value">1.20k<small>7.0&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="@exodus/schemasafe (first error)">@exodus/schemasafe</span><div class="track"><div class="fill" style="width: 1.0%"></div></div><span class="value">814<small>10&times; slower</small></span></div>
+            <div class="chart-row"><span class="name" title="ajv (first error)">ajv</span><div class="track"><div class="fill" style="width: 0.5%"></div></div><span class="value">191<small>44&times; slower</small></span></div>
+          </div>
+        </div>
+        <details class="raw">
+          <summary>All the numbers</summary>
+          <div class="table-wrap">
+          <table class="numbers">
+            <thead>
+              <tr><th>Schemas per second</th><th>order schema</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>jsonschema</td><td>80.4k</td></tr>
+              <tr><td>tv4</td><td>79.6k</td></tr>
+              <tr><td>@cfworker/json-schema</td><td>31.6k</td></tr>
+              <tr><td><strong>schiva (boolean)</strong></td><td>10.6k</td></tr>
+              <tr><td><strong>schiva (first error)</strong></td><td>8.41k</td></tr>
+              <tr><td><strong>schiva (all errors)</strong></td><td>8.29k</td></tr>
+              <tr><td>json-schema-library</td><td>8.02k</td></tr>
+              <tr><td>jsen</td><td>5.37k</td></tr>
+              <tr><td>is-my-json-valid</td><td>3.53k</td></tr>
+              <tr><td>djv</td><td>3.47k</td></tr>
+              <tr><td>z-schema</td><td>1.20k</td></tr>
+              <tr><td>@exodus/schemasafe (boolean)</td><td>1.04k</td></tr>
+              <tr><td>@exodus/schemasafe (first error)</td><td>814</td></tr>
+              <tr><td>@exodus/schemasafe (all errors)</td><td>703</td></tr>
+              <tr><td>ajv (all errors)</td><td>228</td></tr>
+              <tr><td>ajv (first error)</td><td>191</td></tr>
+            </tbody>
+          </table>
+        </div>
+        </details>
+
+        <h2 id="features">Speed of the features</h2>
+        <p>
+          schiva and ajv on the features beyond validating JSON Schema, each with the same options and plugins
+          (ajv-keywords, ajv-formats, ajv-draft-04, ajv's standalone code), with schiva's speed in times ajv's. With the
+          options that change the data, each call validates a new object, made the same way for both. The cases are in
+          <a href="https://github.com/jesus-seijas-sp/schiva/blob/main/bench/features.js">bench/features.js</a>.
+        </p>
+        <div class="tabs segmented">
+        <div class="tab-list" role="tablist"><button role="tab" id="features-tab-0" aria-controls="features-panel-0" aria-selected="true">first error</button><button role="tab" id="features-tab-1" aria-controls="features-panel-1" aria-selected="false">all errors</button></div>
+        <div class="tab-panel" id="features-panel-0" role="tabpanel" aria-labelledby="features-tab-0">
+          <div class="pairs">
+          <div class="pair">
+            <div class="head"><span>custom keyword (validate)</span><span class="times">7.6&times;</span></div>
+            <div class="chart-row us"><span class="name">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">899M</span></div>
+            <div class="chart-row"><span class="name">ajv</span><div class="track"><div class="fill" style="width: 13.1%"></div></div><span class="value">118M</span></div>
+          </div>
+          <div class="pair">
+            <div class="head"><span>ajv-keywords (range, regexp, prohibited, uniqueItemProperties)</span><span class="times">1.3&times;</span></div>
+            <div class="chart-row us"><span class="name">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">28.3M</span></div>
+            <div class="chart-row"><span class="name">ajv</span><div class="track"><div class="fill" style="width: 78.0%"></div></div><span class="value">22.1M</span></div>
+          </div>
+          <div class="pair">
+            <div class="head"><span>useDefaults and removeAdditional (defaults filled, 2 keys removed)</span><span class="times">1.1&times;</span></div>
+            <div class="chart-row us"><span class="name">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">2.62M</span></div>
+            <div class="chart-row"><span class="name">ajv</span><div class="track"><div class="fill" style="width: 92.0%"></div></div><span class="value">2.41M</span></div>
+          </div>
+          <div class="pair">
+            <div class="head"><span>coerceTypes (query string values)</span><span class="times">1.4&times;</span></div>
+            <div class="chart-row us"><span class="name">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">19.4M</span></div>
+            <div class="chart-row"><span class="name">ajv</span><div class="track"><div class="fill" style="width: 73.8%"></div></div><span class="value">14.4M</span></div>
+          </div>
+          <div class="pair">
+            <div class="head"><span>formats with formatMinimum and formatMaximum</span><span class="times">1.1&times;</span></div>
+            <div class="chart-row us"><span class="name">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">869k</span></div>
+            <div class="chart-row"><span class="name">ajv</span><div class="track"><div class="fill" style="width: 88.5%"></div></div><span class="value">769k</span></div>
+          </div>
+          <div class="pair">
+            <div class="head"><span>tagged oneOf without discriminator (8 kinds)</span><span class="times">20&times;</span></div>
+            <div class="chart-row us"><span class="name">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">115M</span></div>
+            <div class="chart-row"><span class="name">ajv</span><div class="track"><div class="fill" style="width: 5.0%"></div></div><span class="value">5.72M</span></div>
+          </div>
+          <div class="pair">
+            <div class="head"><span>draft-04 (boolean exclusiveMaximum, id)</span><span class="times">2.2&times;</span></div>
+            <div class="chart-row us"><span class="name">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">185M</span></div>
+            <div class="chart-row"><span class="name">ajv</span><div class="track"><div class="fill" style="width: 45.1%"></div></div><span class="value">83.3M</span></div>
+          </div>
+          <div class="pair">
+            <div class="head"><span>error objects (order with 20 lines, invalid)</span><span class="times">1.4&times;</span></div>
+            <div class="chart-row us"><span class="name">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">16.9M</span></div>
+            <div class="chart-row"><span class="name">ajv</span><div class="track"><div class="fill" style="width: 72.4%"></div></div><span class="value">12.2M</span></div>
+          </div>
+          <div class="pair">
+            <div class="head"><span>standalone code (order with 20 lines, valid)</span><span class="times">3.3&times;</span></div>
+            <div class="chart-row us"><span class="name">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">2.33M</span></div>
+            <div class="chart-row"><span class="name">ajv</span><div class="track"><div class="fill" style="width: 29.9%"></div></div><span class="value">696k</span></div>
+          </div>
+          <div class="pair">
+            <div class="head"><span>unevaluatedProperties (payment 2020-12)</span><span class="times">1.7&times;</span></div>
+            <div class="chart-row us"><span class="name">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">14.9M</span></div>
+            <div class="chart-row"><span class="name">ajv</span><div class="track"><div class="fill" style="width: 58.8%"></div></div><span class="value">8.76M</span></div>
+          </div>
+        </div>
+        </div>
+        <div class="tab-panel" id="features-panel-1" role="tabpanel" aria-labelledby="features-tab-1" hidden>
+          <div class="pairs">
+          <div class="pair">
+            <div class="head"><span>custom keyword (validate)</span><span class="times">7.7&times;</span></div>
+            <div class="chart-row us"><span class="name">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">879M</span></div>
+            <div class="chart-row"><span class="name">ajv</span><div class="track"><div class="fill" style="width: 12.9%"></div></div><span class="value">114M</span></div>
+          </div>
+          <div class="pair">
+            <div class="head"><span>ajv-keywords (range, regexp, prohibited, uniqueItemProperties)</span><span class="times">1.3&times;</span></div>
+            <div class="chart-row us"><span class="name">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">28.5M</span></div>
+            <div class="chart-row"><span class="name">ajv</span><div class="track"><div class="fill" style="width: 78.0%"></div></div><span class="value">22.2M</span></div>
+          </div>
+          <div class="pair">
+            <div class="head"><span>useDefaults and removeAdditional (defaults filled, 2 keys removed)</span><span class="times">1.1&times;</span></div>
+            <div class="chart-row us"><span class="name">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">2.64M</span></div>
+            <div class="chart-row"><span class="name">ajv</span><div class="track"><div class="fill" style="width: 90.0%"></div></div><span class="value">2.38M</span></div>
+          </div>
+          <div class="pair">
+            <div class="head"><span>coerceTypes (query string values)</span><span class="times">1.4&times;</span></div>
+            <div class="chart-row us"><span class="name">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">19.2M</span></div>
+            <div class="chart-row"><span class="name">ajv</span><div class="track"><div class="fill" style="width: 73.6%"></div></div><span class="value">14.1M</span></div>
+          </div>
+          <div class="pair">
+            <div class="head"><span>formats with formatMinimum and formatMaximum</span><span class="times">1.2&times;</span></div>
+            <div class="chart-row us"><span class="name">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">876k</span></div>
+            <div class="chart-row"><span class="name">ajv</span><div class="track"><div class="fill" style="width: 86.6%"></div></div><span class="value">759k</span></div>
+          </div>
+          <div class="pair">
+            <div class="head"><span>tagged oneOf without discriminator (8 kinds)</span><span class="times">26&times;</span></div>
+            <div class="chart-row us"><span class="name">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">103M</span></div>
+            <div class="chart-row"><span class="name">ajv</span><div class="track"><div class="fill" style="width: 3.8%"></div></div><span class="value">3.93M</span></div>
+          </div>
+          <div class="pair">
+            <div class="head"><span>draft-04 (boolean exclusiveMaximum, id)</span><span class="times">2.2&times;</span></div>
+            <div class="chart-row us"><span class="name">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">184M</span></div>
+            <div class="chart-row"><span class="name">ajv</span><div class="track"><div class="fill" style="width: 44.7%"></div></div><span class="value">82.5M</span></div>
+          </div>
+          <div class="pair">
+            <div class="head"><span>error objects (order with 20 lines, invalid)</span><span class="times">1.7&times;</span></div>
+            <div class="chart-row us"><span class="name">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">722k</span></div>
+            <div class="chart-row"><span class="name">ajv</span><div class="track"><div class="fill" style="width: 57.9%"></div></div><span class="value">418k</span></div>
+          </div>
+          <div class="pair">
+            <div class="head"><span>standalone code (order with 20 lines, valid)</span><span class="times">3.5&times;</span></div>
+            <div class="chart-row us"><span class="name">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">2.37M</span></div>
+            <div class="chart-row"><span class="name">ajv</span><div class="track"><div class="fill" style="width: 28.8%"></div></div><span class="value">683k</span></div>
+          </div>
+          <div class="pair">
+            <div class="head"><span>unevaluatedProperties (payment 2020-12)</span><span class="times">1.8&times;</span></div>
+            <div class="chart-row us"><span class="name">schiva</span><div class="track"><div class="fill" style="width: 100.0%"></div></div><span class="value">14.2M</span></div>
+            <div class="chart-row"><span class="name">ajv</span><div class="track"><div class="fill" style="width: 55.4%"></div></div><span class="value">7.85M</span></div>
+          </div>
+        </div>
+        </div>
+      </div>
+        <details class="raw">
+          <summary>All the numbers</summary>
+          <div class="table-wrap">
+          <table class="numbers">
+            <thead>
+              <tr><th>Validations per second</th><th>schiva, all errors</th><th>ajv, all errors</th><th>schiva, first error</th><th>ajv, first error</th><th>schiva / ajv</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>custom keyword (validate)</td><td><strong>879M</strong></td><td>114M</td><td><strong>899M</strong></td><td>118M</td><td>7.7&times;</td></tr>
+              <tr><td>ajv-keywords (range, regexp, prohibited, uniqueItemProperties)</td><td><strong>28.5M</strong></td><td>22.2M</td><td><strong>28.3M</strong></td><td>22.1M</td><td>1.3&times;</td></tr>
+              <tr><td>useDefaults and removeAdditional (defaults filled, 2 keys removed)</td><td><strong>2.64M</strong></td><td>2.38M</td><td><strong>2.62M</strong></td><td>2.41M</td><td>1.1&times;</td></tr>
+              <tr><td>coerceTypes (query string values)</td><td><strong>19.2M</strong></td><td>14.1M</td><td><strong>19.4M</strong></td><td>14.4M</td><td>1.4&times;</td></tr>
+              <tr><td>formats with formatMinimum and formatMaximum</td><td><strong>876k</strong></td><td>759k</td><td><strong>869k</strong></td><td>769k</td><td>1.2&times;</td></tr>
+              <tr><td>tagged oneOf without discriminator (8 kinds)</td><td><strong>103M</strong></td><td>3.93M</td><td><strong>115M</strong></td><td>5.72M</td><td>26.2&times;</td></tr>
+              <tr><td>draft-04 (boolean exclusiveMaximum, id)</td><td><strong>184M</strong></td><td>82.5M</td><td><strong>185M</strong></td><td>83.3M</td><td>2.2&times;</td></tr>
+              <tr><td>error objects (order with 20 lines, invalid)</td><td><strong>722k</strong></td><td>418k</td><td><strong>16.9M</strong></td><td>12.2M</td><td>1.7&times;</td></tr>
+              <tr><td>standalone code (order with 20 lines, valid)</td><td><strong>2.37M</strong></td><td>683k</td><td><strong>2.33M</strong></td><td>696k</td><td>3.5&times;</td></tr>
+              <tr><td>unevaluatedProperties (payment 2020-12)</td><td><strong>14.2M</strong></td><td>7.85M</td><td><strong>14.9M</strong></td><td>8.76M</td><td>1.8&times;</td></tr>
+            </tbody>
+          </table>
+        </div>
+        </details>
+
+        <h2 id="comparison">schiva and ajv, feature by feature</h2>
+        <div class="table-wrap">
+          <table class="features-matrix">
+            <thead>
+              <tr><th></th><th>schiva 0.4.0</th><th>ajv 8.20.0</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>JSON Schema drafts</td><td>draft-04, draft-06, draft-07, 2019-09, 2020-12</td><td>draft-06 to 2020-12; draft-04 with ajv-draft-04</td></tr>
+              <tr><td>JSON-Schema-Test-Suite, all five drafts</td><td>4950 tests passed, all of them</td><td>4836 tests passed</td></tr>
+              <tr><td>JSON Type Definition (JTD)</td><td>&ndash;</td><td>&#10003;</td></tr>
+              <tr><td>Schema DSL for JavaScript</td><td>&#10003; (String(), Integer()...), with inferred TypeScript types</td><td>&ndash;</td></tr>
+              <tr><td>Messages with the path of the field</td><td>&#10003; (lines[3].price must be at least 0)</td><td>messages without the path; instancePath apart</td></tr>
+              <tr><td>Error objects</td><td>&#10003;</td><td>&#10003;</td></tr>
+              <tr><td>Every error, first error, or true/false</td><td>&#10003;</td><td>&#10003;</td></tr>
+              <tr><td>Standalone code</td><td>&#10003; (no dependency at all)</td><td>&#10003; (requires parts of ajv for some keywords)</td></tr>
+              <tr><td>Formats</td><td>&#10003; built in, idn-hostname and idn-email included</td><td>with ajv-formats</td></tr>
+              <tr><td>Optional format tests passed (2020-12)</td><td>874 / 874</td><td>733 / 874 (with ajv-formats)</td></tr>
+              <tr><td>formatMinimum, formatMaximum</td><td>&#10003;</td><td>with ajv-formats</td></tr>
+              <tr><td>Keywords of your own: validate, compile, macro</td><td>&#10003;</td><td>&#10003;</td></tr>
+              <tr><td>Keywords of your own that write generated code</td><td>&ndash;</td><td>&#10003;</td></tr>
+              <tr><td>ajv-keywords</td><td>&#10003; built in (13 of them)</td><td>with ajv-keywords</td></tr>
+              <tr><td>useDefaults, removeAdditional, coerceTypes</td><td>&#10003;</td><td>&#10003;</td></tr>
+              <tr><td>$data references</td><td>&ndash;</td><td>&#10003;</td></tr>
+              <tr><td>Asynchronous validation ($async)</td><td>&ndash;</td><td>&#10003;</td></tr>
+              <tr><td>Loading referenced documents (compileAsync)</td><td>&#10003; compileJsonSchemaAsync</td><td>&#10003;</td></tr>
+              <tr><td>OpenAPI discriminator</td><td>&#10003; with mapping and implicit names</td><td>const and enum only</td></tr>
+              <tr><td>Tagged oneOf detected without discriminator</td><td>&#10003;</td><td>&ndash;</td></tr>
+              <tr><td>strict mode</td><td>&#10003;</td><td>&#10003;</td></tr>
+              <tr><td>Translated messages, errorMessage</td><td>&ndash;</td><td>with ajv-i18n, ajv-errors</td></tr>
+              <tr><td>Dependencies</td><td>0</td><td>4</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          See <a href="migrating-from-ajv.html">Migrating from ajv</a> for the options, errors and APIs of each one.
+        </p>
+
+        <h2 id="libraries">Libraries</h2>
+        <p>
+          Every library of <a href="https://github.com/ebdrup/json-schema-benchmark">json-schema-benchmark</a> that runs
+          on current Node.js, with the drafts and modes each one is benchmarked in. (ajv always returns true or false,
+          and builds the first error, or all of them, on the way.)
+        </p>
+        <div class="table-wrap">
+          <table class="numbers">
+            <thead>
+              <tr><th>Library</th><th>Version</th><th>Drafts benchmarked</th><th>Modes benchmarked</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>schiva</td><td>0.4.0</td><td>draft-07, 2019-09, 2020-12</td><td>all errors, first error, true/false</td></tr>
+              <tr><td>ajv</td><td>8.20.0</td><td>draft-07, 2019-09, 2020-12</td><td>first error, all errors</td></tr>
+              <tr><td>@exodus/schemasafe</td><td>1.3.0</td><td>draft-07, 2019-09, 2020-12</td><td>true/false, first error, all errors</td></tr>
+              <tr><td>@cfworker/json-schema</td><td>4.1.1</td><td>draft-07, 2019-09, 2020-12</td><td>true/false</td></tr>
+              <tr><td>json-schema-library</td><td>11.6.2</td><td>draft-07, 2019-09, 2020-12</td><td>true/false</td></tr>
+              <tr><td>is-my-json-valid</td><td>2.20.6</td><td>draft-07</td><td>true/false</td></tr>
+              <tr><td>jsen</td><td>0.6.6</td><td>draft-07</td><td>true/false</td></tr>
+              <tr><td>djv</td><td>2.1.4</td><td>draft-07</td><td>true/false</td></tr>
+              <tr><td>jsonschema</td><td>1.5.0</td><td>draft-07</td><td>true/false</td></tr>
+              <tr><td>tv4</td><td>1.3.0</td><td>draft-07</td><td>true/false</td></tr>
+              <tr><td>z-schema</td><td>12.4.6</td><td>draft-07</td><td>true/false</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h2 id="method">Method</h2>
+        <ul>
+          <li>
+            Every measurement runs in a new Node.js process with a single library, as a service uses it, so libraries
+            cannot slow each other down through the state of the JIT they would share. Each one is timed for 1 second
+            after a warm-up, in 3 processes, and the median is kept.
+          </li>
+          <li>
+            Measured on 13th Gen Intel(R) Core(TM) i7-13700H, 20 cores, Windows_NT, Node.js v22.21.1,
+            on 2026-09-30. Benchmarks depend on the machine and on what else runs on it: compare the libraries with each
+            other, not these numbers with another machine's.
+          </li>
+        </ul>
+        <pre><code class="language-sh">cd bench
+pnpm install
+pnpm start                          # test suite and payloads, isolated (about 30 minutes)
+pnpm run features                   # the features of schiva and ajv
+pnpm run conformance draft2020-12   # tests passed by schiva and ajv, file by file
+pnpm run report                     # writes this page</code></pre>
+      </article>
+    </div>
+
+    <footer class="footer">
+      <div class="container">
+        <span>schiva is MIT licensed. &copy; Jes&uacute;s Seijas</span>
+        <span>
+          <a href="./">Home</a> &middot; <a href="guide.html">Guide</a> &middot; <a href="playground.html">Playground</a> &middot; <a href="api.html">API</a> &middot;
+          <a href="https://github.com/jesus-seijas-sp/schiva">GitHub</a> &middot;
+          <a href="https://www.npmjs.com/package/schiva">npm</a>
+        </span>
+      </div>
+    </footer>
+  </body>
+</html>

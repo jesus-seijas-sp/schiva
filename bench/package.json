@@ -11,7 +11,9 @@
     "quick": "pnpm run quick:suite && pnpm run quick:object",
     "quick:suite": "node --no-deprecation suite-bench.js",
     "quick:object": "node --no-deprecation object-bench.js",
-    "conformance": "node --no-deprecation conformance.js"
+    "conformance": "node --no-deprecation conformance.js",
+    "features": "node --no-deprecation features.js",
+    "report": "node --no-deprecation report.js"
   },
   "dependencies": {
     "@cfworker/json-schema": "^4.1.1",

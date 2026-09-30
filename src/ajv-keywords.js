@@ -19,20 +19,13 @@ const isStringList = (value) => Array.isArray(value) && value.every((item) => ty
 const TYPEOF_NAMES = ['undefined', 'string', 'number', 'object', 'function', 'boolean', 'symbol', 'bigint'];
 
 // Constructors "instanceof" can name, as in ajv-keywords.
-const CONSTRUCTORS = {
-  Object,
-  Array,
-  Function,
-  Number,
-  String,
-  Boolean,
-  Date,
-  RegExp,
-  Map,
-  Set,
-  Promise,
-  ...(typeof Buffer === 'undefined' ? {} : { Buffer }),
-};
+// Read from globalThis, so a script that declares a global named like one of them (const { String } = ...) does not
+// shadow it here.
+const CONSTRUCTORS = Object.fromEntries(
+  ['Object', 'Array', 'Function', 'Number', 'String', 'Boolean', 'Date', 'RegExp', 'Map', 'Set', 'Promise', 'Buffer']
+    .filter((name) => typeof globalThis[name] === 'function')
+    .map((name) => [name, globalThis[name]])
+);
 
 // The regular expression of "regexp": "/source/flags" or { pattern, flags }, as ajv-keywords reads it.
 function regExpOf(value) {
@@ -79,6 +72,49 @@ function isDefinedAt(data, tokens) {
     current = current[tokens[i]];
   }
   return current !== undefined;
+}
+
+// Whether no two elements of `data` that are objects have equal values of `key` (deeply, NaN equal to NaN). Short
+// arrays are compared pair by pair, which allocates nothing; long ones keep the values seen.
+function hasUniqueProperty(data, key) {
+  const isItem = (item) => item !== null && typeof item === 'object';
+  const same = (a, b) =>
+    a === b ||
+    (Number.isNaN(a) && Number.isNaN(b)) ||
+    (a !== null && b !== null && typeof a === 'object' && typeof b === 'object' && deepEqual(a, b));
+  if (data.length <= 16) {
+    for (let i = 1; i < data.length; i += 1) {
+      if (isItem(data[i])) {
+        const a = data[i][key];
+        for (let j = 0; j < i; j += 1) {
+          if (isItem(data[j]) && same(a, data[j][key])) {
+            return false;
+          }
+        }
+      }
+    }
+    return true;
+  }
+  const primitives = new Set();
+  const objects = [];
+  return data.every((item) => {
+    if (!isItem(item)) {
+      return true;
+    }
+    const property = item[key];
+    if (property !== null && typeof property === 'object') {
+      if (objects.some((other) => deepEqual(other, property))) {
+        return false;
+      }
+      objects.push(property);
+      return true;
+    }
+    if (primitives.has(property)) {
+      return false;
+    }
+    primitives.add(property);
+    return true;
+  });
 }
 
 const DEFINITIONS = {
@@ -137,36 +173,24 @@ const DEFINITIONS = {
         return regExp.test(data);
       };
     },
-    message: (value) => `must match ${String(regExpOf(value))}`,
+    message: (value) => `must match ${regExpOf(value)}`,
   },
   uniqueItemProperties: {
     type: 'array',
     compile(value) {
       expect(isStringList(value), 'uniqueItemProperties', 'a list of property names');
       // As in ajv-keywords, the elements that are objects (or arrays) count, and a missing property is a value too.
-      return (data) =>
-        value.every((key) => {
-          const primitives = new Set();
-          const objects = [];
-          return data.every((item) => {
-            if (item === null || typeof item !== 'object') {
-              return true;
-            }
-            const property = item[key];
-            if (property !== null && typeof property === 'object') {
-              if (objects.some((other) => deepEqual(other, property))) {
-                return false;
-              }
-              objects.push(property);
-              return true;
-            }
-            if (primitives.has(property)) {
-              return false;
-            }
-            primitives.add(property);
-            return true;
-          });
-        });
+      return (data) => {
+        if (data.length <= 1) {
+          return true;
+        }
+        for (let k = 0; k < value.length; k += 1) {
+          if (!hasUniqueProperty(data, value[k])) {
+            return false;
+          }
+        }
+        return true;
+      };
     },
     message: (value) => `must have elements with unique ${value.join(', ')}`,
   },

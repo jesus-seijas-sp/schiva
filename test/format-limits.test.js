@@ -54,7 +54,8 @@ describe('formatMinimum, formatMaximum, formatExclusiveMinimum and formatExclusi
 
   it('Should be ignored when the format is not checked, as it is', () => {
     expect(check(dates, '2019-01-01', {})).toEqual([]);
-    expect(check(dates, '2019-01-01', { formats: ['email'] })).toEqual([]);
+    expect(check(dates, '2019-01-01', { formats: { email: true, date: false } })).toEqual([]);
+    expect(check(dates, '2019-01-01', { formats: ['email'], strict: false })).toEqual([]);
   });
 
   it('Should apply to strings in schemas without type', () => {

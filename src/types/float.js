@@ -7,8 +7,19 @@ class FloatType extends ValidateType {
     this.max = options.max;
     this.exclusiveMin = options.exclusiveMin;
     this.exclusiveMax = options.exclusiveMax;
-    // Value divided by it must be an integer (floating point division, so 0.3 is not a multiple of 0.1).
+    // Value divided by it must be an integer (floating point division, so 0.3 is not a multiple of 0.1), or with
+    // multipleOfPrecision (a number of decimal digits) within 1e-multipleOfPrecision of one, as ajv's option.
     this.multipleOf = options.multipleOf;
+    this.multipleOfPrecision = options.multipleOfPrecision;
+  }
+
+  isMultiple(value) {
+    const division = value / this.multipleOf;
+    if (this.multipleOfPrecision === undefined) {
+      return Number.isInteger(division);
+    }
+    // As ajv writes it: a division that is not finite is not "too far" from an integer.
+    return !(Math.abs(Math.round(division) - division) > Number(`1e-${this.multipleOfPrecision}`));
   }
 
   validate(value, fieldName = 'Value') {
@@ -32,7 +43,7 @@ class FloatType extends ValidateType {
       if (this.exclusiveMax !== undefined && value >= this.exclusiveMax) {
         return `${fieldName} must be less than ${this.exclusiveMax}`;
       }
-      if (this.multipleOf !== undefined && !Number.isInteger(value / this.multipleOf)) {
+      if (this.multipleOf !== undefined && !this.isMultiple(value)) {
         return `${fieldName} must be a multiple of ${this.multipleOf}`;
       }
     }
@@ -51,7 +62,7 @@ class FloatType extends ValidateType {
       (this.max === undefined || value <= this.max) &&
       (this.exclusiveMin === undefined || value > this.exclusiveMin) &&
       (this.exclusiveMax === undefined || value < this.exclusiveMax) &&
-      (this.multipleOf === undefined || Number.isInteger(value / this.multipleOf))
+      (this.multipleOf === undefined || this.isMultiple(value))
     );
   }
 }

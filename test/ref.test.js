@@ -322,9 +322,31 @@ describe('JSON Schema $ref to other documents', () => {
     expect(() => fromJsonSchema({ $ref: `${remote}missing.json` }, { schemas: {} })).toThrow(
       'or to documents in the "schemas" option are supported'
     );
-    expect(() => fromJsonSchema({}, { schemas: { 'relative.json': {} } })).toThrow('is not an absolute URI');
     expect(() => fromJsonSchema({}, { schemas: { 'http://a.com/x.json#frag': {} } })).toThrow('without fragment');
-    expect(() => fromJsonSchema({}, { schemas: [{ type: 'string' }] })).toThrow('is not an absolute URI');
+    expect(() => fromJsonSchema({}, { schemas: { 'address#frag': {} } })).toThrow('without fragment');
+    expect(() => fromJsonSchema({}, { schemas: [{ type: 'string' }] })).toThrow('is not a URI');
+    expect(() => fromJsonSchema({}, { schemas: { '': {} } })).toThrow('is not a URI');
+  });
+
+  it('Should resolve relative document URIs as ajv and Fastify do', () => {
+    const address = { $id: 'address', type: 'object', required: ['city'], properties: { city: { type: 'string' } } };
+    const validate = compileJsonSchema(
+      { type: 'object', properties: { home: { $ref: 'address#' }, work: { $ref: 'address' } } },
+      { schemas: [address] }
+    );
+    expect(validate({ home: { city: 'X' }, work: { city: 'Y' } })).toEqual([]);
+    expect(validate({ home: {}, work: { city: 1 } })).toEqual(['home.city is mandatory', 'work.city must be a string']);
+    const byKey = compileJsonSchema(
+      { $ref: 'defs.json#/$defs/id' },
+      { schemas: { 'defs.json': { $defs: { id: { type: 'integer' } } } } }
+    );
+    expect(byKey(1.5)).toEqual(['Value must be an integer']);
+    // A root with a relative "$id" of its own reaches them too.
+    const rooted = compileJsonSchema(
+      { $id: 'order', properties: { to: { $ref: 'address#' } } },
+      { schemas: [address] }
+    );
+    expect(rooted({ to: {} })).toEqual(['to.city is mandatory']);
     expect(() => fromJsonSchema({}, { schemas: 'x' })).toThrow('expected an object of schemas by URI or an array');
   });
 });

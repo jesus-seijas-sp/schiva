@@ -6,12 +6,12 @@
     <title>schiva: fast schema validation for JavaScript</title>
     <meta
       name="description"
-      content="Fast schema validation for JavaScript. A schema DSL and JSON Schema (draft-04 to 2020-12), compiled to generated code. Passes the whole JSON Schema test suite of every draft, zero dependencies."
+      content="Check that your data has the right shape, fast, with clear error messages. A schema DSL and JSON Schema (draft-04 to 2020-12), compiled to generated code. Passes the whole JSON Schema test suite, zero dependencies."
     />
     <meta property="og:title" content="schiva: fast schema validation for JavaScript" />
     <meta
       property="og:description"
-      content="A schema DSL and JSON Schema (draft-04 to 2020-12), compiled to generated code. Faster than ajv in every benchmark we run, and passes every test of the JSON Schema test suite."
+      content="Check that your data has the right shape, with clear error messages. Faster than ajv in every benchmark we run, and passes every test of the JSON Schema test suite."
     />
     <meta property="og:url" content="https://schiva.js.org/" />
     <link rel="canonical" href="https://schiva.js.org/" />
@@ -29,10 +29,11 @@
         <a class="logo" href="./"><span class="logo-mark">s</span>schiva</a>
         <nav class="nav">
           <a href="guide.html">Guide</a>
-          <a class="hide-small" href="guide.html#performance">Performance</a>
+          <a href="playground.html">Playground</a>
+          <a href="api.html">API</a>
+          <a class="hide-small" href="benchmarks.html">Benchmarks</a>
           <a class="hide-small" href="migrating-from-ajv.html">From ajv</a>
           <a href="https://github.com/jesus-seijas-sp/schiva">GitHub</a>
-          <a class="hide-small" href="https://www.npmjs.com/package/schiva">npm</a>
           <button class="theme-toggle" type="button" aria-label="Switch between light and dark theme">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
               <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />
@@ -46,44 +47,48 @@
       <div class="container">
         <section class="hero">
           <div>
-            <h1>Schema validation, <em>compiled</em>.</h1>
+            <p class="eyebrow">Schema validation for JavaScript</p>
+            <h1>Check that your data has the <em>right shape</em>.</h1>
             <p>
-              Describe your data with a small DSL or with JSON Schema (draft-04 to 2020-12). schiva turns the
-              schema into a JavaScript function written for it, so every value is checked at full speed, with errors
-              you can show as they are.
+              Describe what a value should look like: an API request, a config file, a form. schiva tells you what is
+              wrong with it, field by field, in messages you can show as they are. It is the fastest validator we have
+              measured, and it has no dependencies.
             </p>
             <div class="actions">
               <a class="button primary" href="guide.html#getting-started">Get started</a>
-              <button class="install" type="button" data-copy="npm install schiva" aria-label="Copy install command">
-                <span>$</span> <b class="copy-label">npm install schiva</b>
-              </button>
+              <a class="button" href="playground.html">Try it in your browser</a>
             </div>
+            <button class="install" type="button" data-copy="npm install schiva" aria-label="Copy install command">
+              <span>$</span> <b class="copy-label">npm install schiva</b>
+            </button>
           </div>
 
-          <div class="tabs">
-            <div class="tab-list" role="tablist">
-              <button role="tab" id="tab-dsl" aria-controls="panel-dsl" aria-selected="true">Schema DSL</button>
-              <button role="tab" id="tab-json" aria-controls="panel-json" aria-selected="false">JSON Schema</button>
-            </div>
-            <div class="tab-panel" id="panel-dsl" role="tabpanel" aria-labelledby="tab-dsl">
-              <pre><code class="language-js">import { ClosedSchema, String, Integer, ArrayOf } from 'schiva';
+          <div class="example">
+            <div class="tabs">
+              <div class="tab-list" role="tablist">
+                <button role="tab" id="tab-dsl" aria-controls="panel-dsl" aria-selected="true">In JavaScript</button>
+                <button role="tab" id="tab-json" aria-controls="panel-json" aria-selected="false">With JSON Schema</button>
+              </div>
+              <div class="tab-panel" id="panel-dsl" role="tabpanel" aria-labelledby="tab-dsl">
+                <pre><code class="language-js">import { ClosedSchema, String, Integer, ArrayOf } from 'schiva';
 
+// 1. Describe the data
 const person = new ClosedSchema({
   id: String(),
   age: Integer({ min: 18 }),
   tags: ArrayOf({ type: String(), isMandatory: false }),
 });
 
+// 2. Compile it once
 const validate = person.compile();
 
-validate({ id: 1, age: 10, extra: 1 });
-// ['id must be a string',
-//  'age must be at least 18',
-//  'Unexpected key: extra']</code></pre>
-            </div>
-            <div class="tab-panel" id="panel-json" role="tabpanel" aria-labelledby="tab-json" hidden>
-              <pre><code class="language-js">import { compileJsonSchema } from 'schiva';
+// 3. Validate values
+validate({ id: 1, age: 10, extra: 1 });</code></pre>
+              </div>
+              <div class="tab-panel" id="panel-json" role="tabpanel" aria-labelledby="tab-json" hidden>
+                <pre><code class="language-js">import { compileJsonSchema } from 'schiva';
 
+// 1. Describe the data, 2. compile it once
 const validate = compileJsonSchema({
   type: 'object',
   required: ['id', 'age'],
@@ -95,7 +100,17 @@ const validate = compileJsonSchema({
   },
 });
 
-validate({ id: 'x', age: 20 }); // []</code></pre>
+// 3. Validate values
+validate({ id: 1, age: 10, extra: 1 });</code></pre>
+              </div>
+            </div>
+            <div class="result" aria-label="What validate returns">
+              <p class="result-title">validate() returns the errors (<code>[]</code> when the value is valid):</p>
+              <ul>
+                <li><code>id</code> must be a string</li>
+                <li><code>age</code> must be at least 18</li>
+                <li>Unexpected key: <code>extra</code></li>
+              </ul>
             </div>
           </div>
         </section>
@@ -103,41 +118,60 @@ validate({ id: 'x', age: 20 }); // []</code></pre>
 
       <section class="section">
         <div class="container">
-          <h2>Why schiva</h2>
-          <p class="lead">Small, strict and fast, with nothing to install besides itself.</p>
-          <div class="features">
-            <div class="feature">
-              <h3>Compiled to code</h3>
+          <h2>How it works</h2>
+          <p class="lead">
+            Three steps, the same with both ways of writing a schema. Try them with the examples of the
+            <a href="playground.html">playground</a>.
+          </p>
+          <ol class="steps">
+            <li class="step">
+              <span class="step-number">1</span>
+              <h3>Describe your data</h3>
               <p>
-                Each schema becomes a function generated for it, in about 0.1 ms (40 times faster than ajv), or written
-                out as a module when building, for strict Content Security Policies.
+                Write a schema: in JavaScript, with <code>String()</code>, <code>Integer()</code>...; or in JSON Schema,
+                the standard format that OpenAPI and many tools use.
               </p>
-            </div>
-            <div class="feature">
-              <h3>Complete JSON Schema</h3>
+            </li>
+            <li class="step">
+              <span class="step-number">2</span>
+              <h3>Compile it once</h3>
               <p>
-                Passes every test of the JSON-Schema-Test-Suite from draft-04 to 2020-12: 4950 of 4950, dynamic
-                references and <code>unevaluatedProperties</code> included.
+                When your program starts, schiva turns the schema into a JavaScript function written for it. It takes
+                well under a millisecond.
               </p>
-            </div>
-            <div class="feature">
-              <h3>Two schema languages</h3>
+            </li>
+            <li class="step">
+              <span class="step-number">3</span>
+              <h3>Validate every value</h3>
               <p>
-                A short DSL for schemas that live in your code, with their TypeScript types inferred. JSON Schema for
-                schemas you share. Same engine.
+                Call the function with a value. It returns the list of errors, each with the field it is about, or
+                <code>true</code>/<code>false</code> if that is all you need.
               </p>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="section alt">
+        <div class="container">
+          <h2>What it is for</h2>
+          <p class="lead">Anywhere data comes from outside your code and you need to trust its shape.</p>
+          <div class="uses">
+            <div class="use">
+              <h3>API requests</h3>
+              <p>Reject a bad request body with a 400 and one message per wrong field.</p>
             </div>
-            <div class="feature">
-              <h3>Readable errors</h3>
-              <p>Plain strings with the path of each field: <code>lines[12].price must be a number</code>.</p>
+            <div class="use">
+              <h3>Config files</h3>
+              <p>Stop at startup with a clear message instead of failing later in odd ways.</p>
             </div>
-            <div class="feature">
-              <h3>Strict by default</h3>
-              <p>A misspelled or unsupported keyword throws when compiling instead of being silently ignored.</p>
+            <div class="use">
+              <h3>Forms and user input</h3>
+              <p>Error objects give the path of each field, to show the message next to it.</p>
             </div>
-            <div class="feature">
-              <h3>Zero dependencies</h3>
-              <p>CommonJS and ESM, Node.js 18 and later, and browsers through any bundler. MIT licensed.</p>
+            <div class="use">
+              <h3>OpenAPI and JSON Schema</h3>
+              <p>Use the schemas you already have or share: every draft from 04 to 2020-12.</p>
             </div>
           </div>
         </div>
@@ -145,67 +179,108 @@ validate({ id: 'x', age: 20 }); // []</code></pre>
 
       <section class="section">
         <div class="container">
-          <h2>Performance</h2>
-          <p class="lead">
-            Faster than ajv in every benchmark we run. Measured against ajv and @exodus/schemasafe with the validators
-            of json-schema-benchmark, each in its own process, in first-error mode unless stated. Higher is better.
-          </p>
-          <div class="bench">
-            <div>
-              <h3>Draft-07 test suite, first error (runs/sec)</h3>
-              <div class="bar-row us"><span class="name">schiva</span><div class="bar" style="width: 100%"></div><span class="value">124k</span></div>
-              <div class="bar-row"><span class="name">schemasafe</span><div class="bar" style="width: 79%"></div><span class="value">98k</span></div>
-              <div class="bar-row"><span class="name">ajv</span><div class="bar" style="width: 48%"></div><span class="value">60k</span></div>
+          <h2>Why schiva</h2>
+          <p class="lead">Fast, correct and clear, with nothing else to install.</p>
+          <div class="features">
+            <div class="feature">
+              <h3>Fast</h3>
+              <p>
+                Faster than ajv, the most used validator, in every benchmark we run: about twice as fast validating,
+                and more than 40 times faster preparing a schema.
+              </p>
             </div>
-            <div>
-              <h3>Draft-07 test suite, all errors (runs/sec)</h3>
-              <div class="bar-row us"><span class="name">schiva</span><div class="bar" style="width: 100%"></div><span class="value">101k</span></div>
-              <div class="bar-row"><span class="name">schemasafe</span><div class="bar" style="width: 63%"></div><span class="value">64k</span></div>
-              <div class="bar-row"><span class="name">ajv</span><div class="bar" style="width: 50%"></div><span class="value">51k</span></div>
+            <div class="feature">
+              <h3>Correct</h3>
+              <p>
+                Passes all 4,950 tests of the official JSON Schema test suite, for the five versions of the standard.
+                No other library we measured passes them all.
+              </p>
             </div>
-            <div>
-              <h3>Draft 2020-12 test suite, first error (runs/sec)</h3>
-              <div class="bar-row us"><span class="name">schiva</span><div class="bar" style="width: 100%"></div><span class="value">25.7k</span></div>
-              <div class="bar-row"><span class="name">schemasafe</span><div class="bar" style="width: 67%"></div><span class="value">17.1k</span></div>
-              <div class="bar-row"><span class="name">ajv *</span><div class="bar" style="width: 58%"></div><span class="value">5–15k</span></div>
+            <div class="feature">
+              <h3>Clear errors</h3>
+              <p>
+                Each error names the field and the problem, <code>lines[3].price must be at least 0</code>, ready to
+                log or return. Error objects are there too, for code.
+              </p>
             </div>
-            <div>
-              <h3>Order, 2020-12 with unevaluatedProperties (validations/sec)</h3>
-              <div class="bar-row us"><span class="name">schiva</span><div class="bar" style="width: 100%"></div><span class="value">2.32M</span></div>
-              <div class="bar-row"><span class="name">ajv</span><div class="bar" style="width: 28%"></div><span class="value">0.66M</span></div>
+            <div class="feature">
+              <h3>Two ways to write schemas</h3>
+              <p>
+                A short JavaScript syntax whose TypeScript types are inferred for you, or JSON Schema for schemas you
+                share with other tools and languages.
+              </p>
             </div>
-            <div>
-              <h3>Payment, oneOf and unevaluatedProperties (validations/sec)</h3>
-              <div class="bar-row us"><span class="name">schiva</span><div class="bar" style="width: 100%"></div><span class="value">15.2M</span></div>
-              <div class="bar-row"><span class="name">ajv</span><div class="bar" style="width: 58%"></div><span class="value">8.8M</span></div>
+            <div class="feature">
+              <h3>Safe by default</h3>
+              <p>
+                A typo in a schema, like <code>maxLenght</code>, stops the program when it compiles, instead of being
+                silently ignored.
+              </p>
             </div>
-            <div>
-              <h3>Shapes, OpenAPI discriminator (validations/sec)</h3>
-              <div class="bar-row us"><span class="name">schiva</span><div class="bar" style="width: 100%"></div><span class="value">117M</span></div>
-              <div class="bar-row"><span class="name">ajv</span><div class="bar" style="width: 38%"></div><span class="value">44.8M</span></div>
-            </div>
-            <div>
-              <h3>Compiling the order schema (per sec)</h3>
-              <div class="bar-row us"><span class="name">schiva</span><div class="bar" style="width: 100%"></div><span class="value">8.4k</span></div>
-              <div class="bar-row"><span class="name">ajv</span><div class="bar" style="width: 2%"></div><span class="value">0.19k</span></div>
+            <div class="feature">
+              <h3>Nothing else to install</h3>
+              <p>
+                No dependencies. Runs on Node.js 18 and later and in browsers, even where generating code is not
+                allowed, by writing validators to files when building.
+              </p>
             </div>
           </div>
-          <p class="note">
-            * ajv's speed on the 2020-12 suite changes from one process to the next, between the two numbers; its bar
-            shows the higher one. All the numbers, and the tests each validator passes, are in the
-            <a href="guide.html#performance">guide</a>. Run them yourself with <code>pnpm run bench</code>; the method
-            is described in <a href="https://github.com/jesus-seijas-sp/schiva/tree/main/bench">bench/</a>.
+        </div>
+      </section>
+
+      <section class="section alt">
+        <div class="container">
+          <h2>In numbers</h2>
+          <p class="lead">
+            Measured against ajv and nine other JSON Schema validators, each in its own process. The details are on the
+            <a href="benchmarks.html">benchmarks page</a>.
           </p>
+          <div class="stats">
+            <div class="stat"><span class="value">4,950</span><span class="label">official JSON Schema tests, all passed (ajv: 4,836)</span></div>
+            <div class="stat"><span class="value">2.1&times;</span><span class="label">ajv's speed validating the JSON Schema test suite</span></div>
+            <div class="stat"><span class="value">2.2&times;</span><span class="label">ajv's speed validating realistic payloads, on average</span></div>
+            <div class="stat"><span class="value">44&times;</span><span class="label">ajv's speed preparing (compiling) a schema</span></div>
+          </div>
+          <a class="more-link" href="benchmarks.html">See every benchmark, library by library &rarr;</a>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="container">
+          <h2>Where to go next</h2>
+          <div class="paths">
+            <a class="path" href="guide.html#getting-started">
+              <span class="path-who">New to schiva?</span>
+              <span class="path-what">Start with the guide</span>
+              <span class="path-desc">Install it, write a first schema, and learn the options step by step.</span>
+            </a>
+            <a class="path" href="migrating-from-ajv.html">
+              <span class="path-who">Using ajv?</span>
+              <span class="path-what">Migrating from ajv</span>
+              <span class="path-desc">The same schemas; what changes in options, errors and APIs.</span>
+            </a>
+            <a class="path" href="api.html">
+              <span class="path-who">Looking something up?</span>
+              <span class="path-what">API reference</span>
+              <span class="path-desc">Every function, type, option and error message.</span>
+            </a>
+            <a class="path" href="benchmarks.html">
+              <span class="path-who">Choosing a library?</span>
+              <span class="path-what">Benchmarks</span>
+              <span class="path-desc">Tests passed, speed and features of eleven validators.</span>
+            </a>
+          </div>
         </div>
       </section>
     </main>
 
     <footer class="footer">
       <div class="container">
-        <span>schiva is MIT licensed. © Jesús Seijas</span>
+        <span>schiva is MIT licensed. &copy; Jes&uacute;s Seijas</span>
         <span>
-          <a href="guide.html">Guide</a> · <a href="https://github.com/jesus-seijas-sp/schiva">GitHub</a> ·
-          <a href="https://www.npmjs.com/package/schiva">npm</a> · <a href="https://js.org">js.org</a>
+          <a href="guide.html">Guide</a> &middot; <a href="playground.html">Playground</a> &middot; <a href="api.html">API</a> &middot; <a href="benchmarks.html">Benchmarks</a> &middot;
+          <a href="migrating-from-ajv.html">From ajv</a> &middot; <a href="https://github.com/jesus-seijas-sp/schiva">GitHub</a> &middot;
+          <a href="https://www.npmjs.com/package/schiva">npm</a> &middot; <a href="https://js.org">js.org</a>
         </span>
       </div>
     </footer>

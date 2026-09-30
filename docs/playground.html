@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Playground &middot; schiva</title>
+    <meta
+      name="description"
+      content="Try schiva in your browser: pick an example, edit the schema and the value, and see the errors, the generated code and the speed as you type."
+    />
+    <link rel="canonical" href="https://schiva.js.org/playground.html" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230d7c66'/%3E%3Ctext x='16' y='22.5' font-family='monospace' font-size='18' font-weight='700' fill='white' text-anchor='middle'%3Es%3C/text%3E%3C/svg%3E"
+    />
+    <link rel="stylesheet" href="style.css" />
+    <script src="main.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+    <script src="schiva.js" defer></script>
+    <script src="playground-examples.js" defer></script>
+    <script src="playground.js" defer></script>
+  </head>
+  <body>
+    <header class="header">
+      <div class="header-inner">
+        <a class="logo" href="./"><span class="logo-mark">s</span>schiva</a>
+        <nav class="nav">
+          <a href="guide.html">Guide</a>
+          <a href="playground.html" aria-current="page">Playground</a>
+          <a href="api.html">API</a>
+          <a class="hide-small" href="benchmarks.html">Benchmarks</a>
+          <a class="hide-small" href="migrating-from-ajv.html">From ajv</a>
+          <a href="https://github.com/jesus-seijas-sp/schiva">GitHub</a>
+          <button class="theme-toggle" type="button" aria-label="Switch between light and dark theme">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />
+            </svg>
+          </button>
+        </nav>
+      </div>
+    </header>
+
+    <main class="pg">
+      <div class="pg-head">
+        <div>
+          <h1>Playground</h1>
+          <p class="pg-intro">
+            Pick an example, then edit the schema or the value: the result updates as you type. Everything runs in your
+            browser.
+          </p>
+        </div>
+        <div class="pg-controls">
+          <label class="pg-field">
+            <span>Example</span>
+            <select id="example">
+              <option value="" hidden>A shared schema</option>
+            </select>
+          </label>
+          <button class="button" type="button" id="reset">Reset</button>
+          <button class="button primary" type="button" id="share">Copy link</button>
+        </div>
+      </div>
+      <p class="pg-hint"><strong>Try this:</strong> <span id="hint"></span></p>
+
+      <div class="pg-grid">
+        <section class="pg-panel pg-schema">
+          <div class="pg-panel-head">
+            <h2><span class="pg-step">1</span> Schema</h2>
+            <span class="pg-badge" id="language"></span>
+          </div>
+          <textarea id="schema" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off"></textarea>
+        </section>
+
+        <div class="pg-side">
+          <section class="pg-panel">
+            <div class="pg-panel-head">
+              <h2><span class="pg-step">2</span> Value to check</h2>
+              <span class="pg-note">JSON or JavaScript</span>
+            </div>
+            <textarea id="value" class="pg-value" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off" aria-label="Value to check"></textarea>
+          </section>
+
+          <section class="pg-panel">
+            <div class="pg-panel-head">
+              <h2>Options</h2>
+              <label class="pg-field pg-mode">
+                <span>Return</span>
+                <select id="mode">
+                  <option value="messages">every error message</option>
+                  <option value="first">the first error message</option>
+                  <option value="objects">error objects</option>
+                  <option value="boolean">true or false</option>
+                </select>
+              </label>
+            </div>
+            <textarea id="options" class="pg-options" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off" aria-label="Compile options"></textarea>
+          </section>
+
+          <section class="pg-panel pg-output">
+            <div class="pg-panel-head">
+              <h2><span class="pg-step">3</span> Result</h2>
+            </div>
+            <div id="result" class="pg-result" aria-live="polite"></div>
+          </section>
+        </div>
+      </div>
+
+      <details class="pg-code" id="code-section">
+        <summary>See the code schiva generated for this schema</summary>
+        <p>
+          <code>compile()</code> writes a JavaScript function for the schema: this is why it is fast. The helpers it calls
+          (<code>P</code>, <code>H</code>, <code>OP</code>...) are passed to it when it is created.
+        </p>
+        <pre><code id="code" class="language-js"></code></pre>
+      </details>
+
+      <p class="pg-footer-note">
+        New to schiva? The <a href="guide.html">guide</a> explains every option, and the <a href="api.html">API reference</a>
+        lists every function.
+      </p>
+    </main>
+
+    <footer class="footer">
+      <div class="container">
+        <span>schiva is MIT licensed. &copy; Jes&uacute;s Seijas</span>
+        <span>
+          <a href="guide.html">Guide</a> &middot; <a href="playground.html">Playground</a> &middot; <a href="api.html">API</a> &middot;
+          <a href="benchmarks.html">Benchmarks</a> &middot; <a href="migrating-from-ajv.html">From ajv</a> &middot;
+          <a href="https://github.com/jesus-seijas-sp/schiva">GitHub</a> &middot; <a href="https://www.npmjs.com/package/schiva">npm</a>
+        </span>
+      </div>
+    </footer>
+  </body>
+</html>

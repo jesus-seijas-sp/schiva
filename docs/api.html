@@ -1,0 +1,590 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>API reference &middot; schiva</title>
+    <meta
+      name="description"
+      content="Every function, class, option and error message of schiva: compiling, JSON Schema options, standalone code, the schema DSL, types of your own, TypeScript types."
+    />
+    <link rel="canonical" href="https://schiva.js.org/api.html" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230d7c66'/%3E%3Ctext x='16' y='22.5' font-family='monospace' font-size='18' font-weight='700' fill='white' text-anchor='middle'%3Es%3C/text%3E%3C/svg%3E"
+    />
+    <link rel="stylesheet" href="style.css" />
+    <script src="main.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+  </head>
+  <body>
+    <header class="header">
+      <div class="header-inner">
+        <a class="logo" href="./"><span class="logo-mark">s</span>schiva</a>
+        <nav class="nav">
+          <a href="guide.html">Guide</a>
+          <a href="playground.html">Playground</a>
+          <a href="api.html" aria-current="page">API</a>
+          <a class="hide-small" href="benchmarks.html">Benchmarks</a>
+          <a class="hide-small" href="migrating-from-ajv.html">From ajv</a>
+          <a href="https://github.com/jesus-seijas-sp/schiva">GitHub</a>
+          <button class="theme-toggle" type="button" aria-label="Switch between light and dark theme">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />
+            </svg>
+          </button>
+        </nav>
+      </div>
+    </header>
+
+    <div class="docs">
+      <button class="menu-toggle" type="button" aria-expanded="false">&#9776; Contents</button>
+      <aside class="sidebar">
+        <h4>Compiling</h4>
+        <ul>
+          <li><a href="#compile-json-schema">compileJsonSchema</a></li>
+          <li><a href="#compile-json-schema-async">compileJsonSchemaAsync</a></li>
+          <li><a href="#load-json-schemas">loadJsonSchemas</a></li>
+          <li><a href="#from-json-schema">fromJsonSchema</a></li>
+          <li><a href="#compile">compile and compileType</a></li>
+          <li><a href="#compile-options">Compile options</a></li>
+          <li><a href="#json-schema-options">JSON Schema options</a></li>
+        </ul>
+        <h4>Standalone code</h4>
+        <ul>
+          <li><a href="#standalone">standaloneJsonSchema, standaloneCode, standaloneModule</a></li>
+        </ul>
+        <h4>Schema DSL</h4>
+        <ul>
+          <li><a href="#common">Common options and methods</a></li>
+          <li><a href="#schema">Schema and ClosedSchema</a></li>
+          <li><a href="#scalar-types">Strings, numbers, booleans</a></li>
+          <li><a href="#value-types">Enum, Values, Const</a></li>
+          <li><a href="#array-type">ArrayOf</a></li>
+          <li><a href="#combinations">AnyOf, AllOf, OneOf, Not</a></li>
+          <li><a href="#conditions">Conditional, When</a></li>
+          <li><a href="#other-types">Any, Never, Obj, Ref</a></li>
+          <li><a href="#helpers">Short helpers</a></li>
+        </ul>
+        <h4>Extending</h4>
+        <ul>
+          <li><a href="#validate-type">ValidateType</a></li>
+          <li><a href="#keyword-definitions">Keyword definitions</a></li>
+          <li><a href="#ajv-keywords">ajvKeywords</a></li>
+          <li><a href="#format-definitions">Formats of your own</a></li>
+        </ul>
+        <h4>Results</h4>
+        <ul>
+          <li><a href="#results">validate() results, toErrors, hasErrors</a></li>
+          <li><a href="#error-objects">Error objects</a></li>
+          <li><a href="#messages">Messages and keywords</a></li>
+          <li><a href="#typescript">TypeScript types</a></li>
+        </ul>
+      </aside>
+
+      <article class="content">
+        <h1>API reference</h1>
+        <p class="intro">
+          Every export of schiva, with its options. The <a href="guide.html">guide</a> explains how to use them together;
+          this page is the list to come back to. Everything is exported from <code>schiva</code>, with
+          <code>require</code> and with <code>import</code>.
+        </p>
+
+        <h2 id="compile-json-schema">compileJsonSchema(json, options)</h2>
+        <p>
+          Compiles a JSON Schema (draft-04 to 2020-12) into a validation function. The function returns the errors of a
+          value: <code>[]</code> when it is valid. What it returns depends on the
+          <a href="#compile-options">compile options</a>; the <a href="#json-schema-options">JSON Schema options</a>
+          choose how the schema is read. It throws when the schema is not supported (an unknown keyword, a reference
+          that does not resolve...), with the place in the schema.
+        </p>
+        <pre><code class="language-js">const validate = compileJsonSchema({ type: 'object', properties: { age: { type: 'integer', minimum: 0 } } });
+validate({ age: -1 }); // ['age must be at least 0']
+
+const isValid = compileJsonSchema(schema, { errors: false }); // (value) =&gt; true or false
+const firstError = compileJsonSchema(schema, { allErrors: false }); // [] or [the first error]
+const withObjects = compileJsonSchema(schema, { errors: 'objects' }); // error objects</code></pre>
+        <p>
+          In TypeScript, <code>compileJsonSchema&lt;T&gt;(json, { errors: false })</code> is a type guard for
+          <code>T</code>.
+        </p>
+
+        <h2 id="compile-json-schema-async">compileJsonSchemaAsync(json, options)</h2>
+        <p>
+          The same, for a schema that references documents to load first: a promise of the validation function. It
+          calls <code>options.loadSchema(uri)</code>, an async function you write, for each document the schema
+          reaches and <code>options.schemas</code> does not have, and for the ones those reference in turn, once each.
+          A reference relative to a schema without <code>$id</code> is not loaded; an error of
+          <code>loadSchema</code> rejects the promise.
+        </p>
+        <pre><code class="language-js">const validate = await compileJsonSchemaAsync(schema, {
+  loadSchema: async (uri) =&gt; (await fetch(uri)).json(),
+});</code></pre>
+
+        <h2 id="load-json-schemas">loadJsonSchemas(json, options)</h2>
+        <p>
+          Loads the same documents without compiling: a promise of <code>options.schemas</code> with them added, as
+          <code>{ uri: schema }</code>, to pass to <code>compileJsonSchema()</code> or
+          <code>standaloneJsonSchema()</code> later.
+        </p>
+
+        <h2 id="from-json-schema">fromJsonSchema(json, options)</h2>
+        <p>
+          Converts a JSON Schema into schiva types, with the same JSON Schema options, without compiling: the result has
+          <code>validate(value)</code>, <code>isValid(value)</code> and <code>compile(options)</code> like any type.
+          <code>compileJsonSchema(json, options)</code> is <code>compileType(fromJsonSchema(json, options), options)</code>.
+        </p>
+
+        <h2 id="compile">type.compile(options) and compileType(type, options)</h2>
+        <p>
+          Compile a DSL schema or any type into a validation function, with the <a href="#compile-options">compile
+          options</a>: <code>type.compile(options)</code> and <code>compileType(type, options)</code> are the same.
+          Compile once, when the program starts, and keep the function. Three older functions compile one mode each:
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Function</th><th>Returns a function giving</th><th>Same as</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>compileIsValid(type)</code></td><td><code>true</code> or <code>false</code></td><td><code>compileType(type, { errors: false })</code></td></tr>
+              <tr><td><code>compileFirstError(type)</code></td><td>the first message, or <code>undefined</code></td><td>the first element of <code>{ allErrors: false }</code></td></tr>
+              <tr><td><code>compileErrors(type)</code></td><td>every message</td><td><code>compileType(type)</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h2 id="compile-options">Compile options</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Option</th><th>Values</th><th>Meaning</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>allErrors</code></td><td><code>true</code> (default), <code>false</code></td><td>every error, or only the first one: the function stops at the first failing check, faster on invalid values</td></tr>
+              <tr><td><code>errors</code></td><td><code>true</code> (default), <code>'objects'</code>, <code>false</code></td><td>error messages (strings), <a href="#error-objects">error objects</a>, or <code>true</code>/<code>false</code> with no errors built at all (the fastest)</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h2 id="json-schema-options">JSON Schema options</h2>
+        <p>
+          For <code>compileJsonSchema()</code>, <code>compileJsonSchemaAsync()</code>, <code>loadJsonSchemas()</code>,
+          <code>fromJsonSchema()</code> and <code>standaloneJsonSchema()</code>, next to the compile options:
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Option</th><th>Values</th><th>Meaning</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>schemas</code></td><td><code>{ uri: schema }</code> or an array of schemas with <code>$id</code> (<code>id</code> in draft-04)</td><td>documents that <code>$ref</code> can point to, and meta-schemas <code>$schema</code> can name (see <a href="guide.html#documents">Several documents</a>)</td></tr>
+              <tr><td><code>draft</code></td><td><code>'draft-04'</code>, <code>'draft-06'</code>, <code>'draft-07'</code>, <code>'2019-09'</code>, <code>'2020-12'</code></td><td>the draft of the schema; by default the one <code>$schema</code> names, else draft-07</td></tr>
+              <tr><td><code>formats</code></td><td><code>true</code>, a list of built-in names, or <code>{ name: true | false | RegExp | function | { validate, compare } }</code> (<code>false</code>: known, not checked); <code>builtInFormats()</code> gives every built-in one</td><td>checks <code>format</code>, an annotation without it; with <code>strict</code>, a format it does not name throws (see <a href="guide.html#formats">Formats</a> and <a href="#format-definitions">Formats of your own</a>)</td></tr>
+              <tr><td><code>strict</code></td><td><code>true</code> (default), <code>false</code></td><td>with <code>false</code>, unknown keywords, keywords of other drafts and keywords a <code>type</code> excludes are ignored instead of throwing</td></tr>
+              <tr><td><code>keywords</code></td><td>list of names and <a href="#keyword-definitions">definitions</a></td><td>names are annotations of your own (<code>'x-internal'</code>); definitions are keywords that check values</td></tr>
+              <tr><td><code>useDefaults</code></td><td><code>false</code> (default), <code>true</code>, <code>'empty'</code></td><td>assigns the <code>default</code> of missing properties and tuple elements; <code>'empty'</code> also replaces <code>null</code> and <code>''</code> (see <a href="guide.html#changing-the-data">Changing the data</a>)</td></tr>
+              <tr><td><code>removeAdditional</code></td><td><code>false</code> (default), <code>true</code>, <code>'all'</code>, <code>'failing'</code></td><td>removes additional properties: where <code>additionalProperties</code> is <code>false</code>; all of them; or the ones that fail <code>additionalProperties</code></td></tr>
+              <tr><td><code>coerceTypes</code></td><td><code>false</code> (default), <code>true</code>, <code>'array'</code></td><td>converts values to the types <code>type</code> asks for, with ajv's rules; <code>'array'</code> also wraps and unwraps arrays</td></tr>
+              <tr><td><code>multipleOfPrecision</code></td><td>a positive integer</td><td>decimal digits: <code>multipleOf</code> accepts a division within 1e-n of an integer, so 0.3 is a multiple of 0.1</td></tr>
+              <tr><td><code>loadSchema</code></td><td><code>async (uri) =&gt; schema</code></td><td>for <code>compileJsonSchemaAsync()</code> and <code>loadJsonSchemas()</code> only</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h2 id="standalone">standaloneJsonSchema, standaloneCode and standaloneModule</h2>
+        <p>
+          Write validators out as the source of a JavaScript module, to save to a file when building: loading it
+          generates no code, so it runs under a strict Content Security Policy, and it needs nothing else, not even
+          schiva. Each one takes the compile options, and <code>format</code>: <code>'commonjs'</code> (default) or
+          <code>'esm'</code>.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Function</th><th>Module</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>standaloneJsonSchema(json, options)</code></td><td>the validator of a JSON Schema as its default export; takes the JSON Schema options too</td></tr>
+              <tr><td><code>standaloneCode(type, options)</code></td><td>the validator of a type (a DSL schema, or the result of <code>fromJsonSchema()</code>) as its default export</td></tr>
+              <tr><td><code>standaloneModule({ name: type }, options)</code></td><td>one named export for each entry, sharing the code they have in common</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <pre><code class="language-js">fs.writeFileSync('validate-order.js', standaloneJsonSchema(orderSchema, { format: 'esm', formats: true }));
+fs.writeFileSync('validators.cjs', standaloneModule({ order, customer }, { errors: 'objects' }));</code></pre>
+        <p>
+          Everything the schema needs is written into the module: the built-in formats, error objects, defaults and the
+          keywords that are macros or regular expressions. Functions of your own cannot be written out: types of your
+          own, keywords with <code>validate</code> or <code>compile</code>, and formats given as functions throw a
+          message naming them.
+        </p>
+
+        <h2 id="common">Common options and methods of the types</h2>
+        <p>Every DSL type takes these options and has these methods:</p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Option or method</th><th>Meaning</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>isMandatory</code></td><td>default <code>true</code>: <code>undefined</code> (a missing property) is an error, <code>is mandatory</code></td></tr>
+              <tr><td><code>isNullable</code></td><td>default <code>false</code>: <code>null</code> is an error, <code>cannot be null</code></td></tr>
+              <tr><td><code>.optional()</code>, <code>.required()</code></td><td>set <code>isMandatory</code> to <code>false</code> or <code>true</code>, and return the type</td></tr>
+              <tr><td><code>.nullable()</code>, <code>.notNull()</code></td><td>set <code>isNullable</code> to <code>true</code> or <code>false</code>, and return the type</td></tr>
+              <tr><td><code>.mandatory(flag)</code>, <code>.nullable(flag)</code></td><td>the same with a value</td></tr>
+              <tr><td><code>.validate(value, fieldName)</code></td><td>the errors without compiling: <code>undefined</code>, a message or a list (see <a href="#results">validate() results</a>)</td></tr>
+              <tr><td><code>.isValid(value)</code></td><td><code>true</code> or <code>false</code> without compiling</td></tr>
+              <tr><td><code>.compile(options)</code></td><td>a validation function (see <a href="#compile-options">Compile options</a>)</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Wherever a type is expected, a plain object stands for <code>new Schema(object)</code> (an open schema). A
+          value that is neither a type nor an object of types throws when the type is built.
+        </p>
+
+        <h2 id="schema">new Schema(shape, options) and new ClosedSchema(shape, options)</h2>
+        <p>
+          A schema for objects: each key of <code>shape</code> is an expected property with its type. Declared keys
+          are read as own properties only. <code>ClosedSchema</code> is a <code>Schema</code> with
+          <code>isOpen: false</code>.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Option</th><th>Meaning</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>isOpen</code></td><td>default <code>true</code>; <code>false</code> rejects keys the shape does not declare: <code>Unexpected key: extra</code></td></tr>
+              <tr><td><code>additionalType</code></td><td>type of the keys the shape does not declare</td></tr>
+              <tr><td><code>patternTypes</code></td><td><code>[{ pattern, type }]</code>: type of the keys a regular expression matches; they are not additional keys</td></tr>
+              <tr><td><code>propertyNameType</code></td><td>type every key must satisfy; its errors name the key <code>Key name</code></td></tr>
+              <tr><td><code>minProperties</code>, <code>maxProperties</code></td><td>number of keys</td></tr>
+              <tr><td><code>dependencies</code></td><td><code>[{ key, required: [keys] }]</code> or <code>[{ key, type }]</code>: when <code>key</code> is present, those keys must be too, or the whole object must satisfy <code>type</code></td></tr>
+              <tr><td><code>isMandatory</code>, <code>isNullable</code></td><td>as for every type</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <pre><code class="language-js">const config = new ClosedSchema(
+  { name: String(), port: Integer({ min: 1, max: 65535 }), tls: Boolean().optional(), cert: String().optional() },
+  { patternTypes: [{ pattern: /^x-/, type: Any() }], dependencies: [{ key: 'tls', required: ['cert'] }] }
+);
+config.compile()({ name: 'api', port: 443, tls: true, 'x-team': 'a', debug: true });
+// ['Unexpected key: debug', 'cert is mandatory when tls is present']</code></pre>
+
+        <h2 id="scalar-types">String, Integer, Float and Boolean</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Type</th><th>Options</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>String(options)</code><br /><code>StringType</code></td>
+                <td>
+                  <code>min</code>, <code>max</code>: length; <code>pattern</code>: a <code>RegExp</code>;
+                  <code>format</code>: a built-in format (<code>email</code>, <code>date</code>, <code>uuid</code>...);
+                  <code>allowEmpty</code>: whether <code>''</code> passes <code>min</code> (by default, when the string
+                  is optional); <code>countCodePoints</code>: count lengths in Unicode code points instead of UTF-16
+                  units (as JSON Schema does)
+                </td>
+              </tr>
+              <tr>
+                <td><code>Integer(options)</code>, <code>Float(options)</code><br /><code>IntegerType</code>, <code>FloatType</code></td>
+                <td>
+                  <code>min</code>, <code>max</code>, <code>exclusiveMin</code>, <code>exclusiveMax</code>,
+                  <code>multipleOf</code>, <code>multipleOfPrecision</code>. Numbers must be finite:
+                  <code>NaN</code> and <code>Infinity</code> are not numbers
+                </td>
+              </tr>
+              <tr><td><code>Boolean(options)</code><br /><code>BooleanType</code></td><td>the common options</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h2 id="value-types">Enum, Values and Const</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Type</th><th>Accepts</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>Enum({ options })</code><br /><code>EnumType</code></td><td>one of the strings of <code>options</code>; takes the options of <code>String</code> too</td></tr>
+              <tr><td><code>Values({ values })</code><br /><code>ValuesType</code></td><td>one of <code>values</code>, of any JSON type, compared deeply (objects and arrays by their content)</td></tr>
+              <tr><td><code>Const(value, options)</code></td><td>that value only: <code>Values({ values: [value], ...options })</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h2 id="array-type">ArrayOf(options)</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Option</th><th>Meaning</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>type</code></td><td>the type of every element, or an array of types for the elements at each position (a tuple)</td></tr>
+              <tr><td><code>additionalType</code></td><td>with a tuple, the type of the elements after it</td></tr>
+              <tr><td><code>min</code>, <code>max</code></td><td>number of elements</td></tr>
+              <tr><td><code>unique</code></td><td>no two elements are equal (compared deeply)</td></tr>
+              <tr><td><code>contains</code>, <code>minContains</code>, <code>maxContains</code></td><td>at least one element (or between the two numbers) satisfies <code>contains</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <pre><code class="language-js">ArrayOf({ type: [String(), Integer()], additionalType: Boolean(), min: 2 }); // ['a', 1, true, false]</code></pre>
+
+        <h2 id="combinations">AnyOf, AllOf, OneOf and Not</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Type</th><th>Accepts</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>AnyOf({ types })</code></td><td>values at least one of the types accepts; otherwise the errors of every type</td></tr>
+              <tr><td><code>AllOf({ types })</code></td><td>values every type accepts; the errors of each one</td></tr>
+              <tr><td><code>OneOf({ types })</code></td><td>values exactly one of the types accepts</td></tr>
+              <tr><td><code>Not({ type })</code></td><td>values the type rejects: <code>must not match the excluded schema</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h2 id="conditions">Conditional and When</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Type</th><th>Accepts</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>Conditional({ ifType, thenType, elseType })</code></td><td>when the value satisfies <code>ifType</code>, it must satisfy <code>thenType</code>, else <code>elseType</code> (JSON Schema's <code>if</code>/<code>then</code>/<code>else</code>); either may be left out</td></tr>
+              <tr><td><code>When({ jsonType, type })</code></td><td>checks <code>type</code> only for values of that JSON type (<code>'object'</code>, <code>'array'</code>, <code>'string'</code>, <code>'number'</code>); other values pass. <code>isJsonType(value, jsonType)</code> is its test</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <pre><code class="language-js">Conditional({
+  ifType: { country: Const('US') },
+  thenType: { zip: String({ pattern: /^\d{5}$/ }) },
+  elseType: { zip: String() },
+});</code></pre>
+
+        <h2 id="other-types">Any, Never, Obj and Ref</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Type</th><th>Accepts</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>Any(options)</code></td><td>every value (with the presence options)</td></tr>
+              <tr><td><code>Never(options)</code></td><td>no value: <code>is not allowed</code>; with <code>isMandatory: false</code> (the default of <code>never()</code>), a missing property passes</td></tr>
+              <tr><td><code>Obj({ schema })</code></td><td>any object, or one a schema accepts</td></tr>
+              <tr><td><code>Ref({ target })</code></td><td>what <code>target</code> accepts; set <code>ref.target</code> later for recursive schemas (see <a href="guide.html#recursive">Recursive schemas</a>)</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h2 id="helpers">Short helpers</h2>
+        <p>
+          Functions with positional arguments, for short schemas. Each has an optional version starting with
+          <code>o</code> (<code>isMandatory</code> defaults to <code>false</code>).
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Helper</th><th>Same as</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>str(min, max, isMandatory, isNullable)</code>, <code>ostr</code></td><td><code>String({ min, max, ... })</code></td></tr>
+              <tr><td><code>int(min, max, ...)</code>, <code>oint</code></td><td><code>Integer({ min, max, ... })</code></td></tr>
+              <tr><td><code>float(min, max, ...)</code>, <code>ofloat</code>, <code>num</code>, <code>onum</code></td><td><code>Float({ min, max, ... })</code></td></tr>
+              <tr><td><code>bool(isMandatory, isNullable)</code>, <code>obool</code></td><td><code>Boolean()</code></td></tr>
+              <tr><td><code>any()</code>, <code>oany</code>, <code>never()</code></td><td><code>Any()</code>, <code>Never()</code></td></tr>
+              <tr><td><code>enumt(options, ...)</code>, <code>oenumt</code>, <code>oenum</code></td><td><code>Enum({ options })</code></td></tr>
+              <tr><td><code>arrOf(type, min, max, ...)</code>, <code>oarrOf</code></td><td><code>ArrayOf({ type, min, max })</code>; <code>arrOf({ type, min, ... })</code> takes the options</td></tr>
+              <tr><td><code>obj(shape, ...)</code>, <code>oobj</code></td><td><code>Obj({ schema: shape })</code>; <code>obj({ schema, isNullable, ... })</code> takes the options</td></tr>
+              <tr><td><code>anyOf(types)</code>, <code>allOf</code>, <code>oneOf</code>, and <code>oanyOf</code>, <code>oallOf</code>, <code>ooneOf</code></td><td><code>AnyOf({ types })</code>...</td></tr>
+              <tr><td><code>not(type)</code>, <code>onot</code></td><td><code>Not({ type })</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h2 id="validate-type">ValidateType</h2>
+        <p>
+          The base class of every type. Extend it (or a built-in type) with your own <code>validate(value, fieldName)</code>
+          returning <code>undefined</code> or a message, and optionally a faster <code>isValid(value)</code>; the
+          compiled code calls them for their part of a schema. <code>super.validate(value, fieldName)</code> checks
+          <code>isMandatory</code> and <code>isNullable</code>. <code>checkPresence(value)</code> gives the verdict for
+          <code>undefined</code> and <code>null</code> (<code>undefined</code> for other values). See
+          <a href="guide.html#custom-types">Types of your own</a>.
+        </p>
+
+        <h2 id="keyword-definitions">Keyword definitions</h2>
+        <p>Items of the JSON Schema option <code>keywords</code> that check values:</p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Property</th><th>Meaning</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>keyword</code></td><td>its name; not a keyword of JSON Schema</td></tr>
+              <tr><td><code>type</code></td><td>JSON types of the values it checks (<code>'string'</code>, <code>'number'</code>, <code>'integer'</code>, <code>'boolean'</code>, <code>'object'</code>, <code>'array'</code>, <code>'null'</code>), one or a list; every value by default. A macro takes <code>object</code>, <code>array</code>, <code>string</code> or <code>number</code></td></tr>
+              <tr><td><code>validate(value, data, parentSchema)</code></td><td>called for each value with the value of the keyword: <code>true</code> when valid</td></tr>
+              <tr><td><code>compile(value, parentSchema, { draft })</code></td><td>called once, when compiling: gives the function checking the data, or a regular expression the data must match</td></tr>
+              <tr><td><code>macro(value, parentSchema, { draft })</code></td><td>gives a schema to check instead; compiles to the same code as its keywords</td></tr>
+              <tr><td><code>message</code></td><td>the text of its error after the name of the value, or <code>(value, data) =&gt; text</code>; <code>must pass the "&lt;keyword&gt;" keyword</code> by default. A function with one parameter is called once, when compiling</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          A definition has exactly one of <code>validate</code>, <code>compile</code> and <code>macro</code>. Compiled,
+          a keyword becomes a <code>KeywordType</code> (<code>{ keyword, check, message, jsonTypes }</code>), which can
+          also be used in the DSL.
+        </p>
+
+        <h2 id="ajv-keywords">ajvKeywords(names)</h2>
+        <p>
+          Definitions of the keywords of ajv-keywords, with the same results: all of them, or the ones named (a name or
+          a list). <code>transform</code>, <code>dynamicDefaults</code> and <code>select</code> throw, with the reason.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Keyword</th><th>Value</th><th>Checks</th><th>Standalone</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>typeof</code></td><td>a name or names</td><td>the <code>typeof</code> of the value</td><td>no</td></tr>
+              <tr><td><code>instanceof</code></td><td><code>'Date'</code>, <code>'RegExp'</code>, <code>'Map'</code>... or a list</td><td>the class of the value</td><td>no</td></tr>
+              <tr><td><code>range</code>, <code>exclusiveRange</code></td><td><code>[min, max]</code></td><td>numbers between the two, included or not</td><td>yes</td></tr>
+              <tr><td><code>regexp</code></td><td><code>'/pattern/flags'</code> or <code>{ pattern, flags }</code></td><td>strings the regular expression matches</td><td>yes, without the flags g and y</td></tr>
+              <tr><td><code>uniqueItemProperties</code></td><td>property names</td><td>no two elements have equal values of each one</td><td>no</td></tr>
+              <tr><td><code>allRequired</code></td><td><code>true</code></td><td>every key of <code>properties</code> is present</td><td>yes</td></tr>
+              <tr><td><code>anyRequired</code>, <code>oneRequired</code></td><td>property names</td><td>at least one, or exactly one, is present</td><td>yes</td></tr>
+              <tr><td><code>patternRequired</code></td><td>patterns</td><td>for each one, a key matches it</td><td>no</td></tr>
+              <tr><td><code>prohibited</code></td><td>property names</td><td>none of them is present: <code>x is not allowed</code></td><td>yes</td></tr>
+              <tr><td><code>deepProperties</code></td><td><code>{ '/json/pointer': schema }</code></td><td>the values at those pointers</td><td>yes</td></tr>
+              <tr><td><code>deepRequired</code></td><td>JSON pointers</td><td>the values at those pointers are defined</td><td>no</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h2 id="format-definitions">Formats of your own</h2>
+        <p>
+          In the JSON Schema option <code>formats</code>, a name maps to <code>true</code> (a built-in format),
+          <code>false</code> (a format that is known but not checked, as OpenAPI's <code>int32</code>), a regular
+          expression, a function <code>(string) =&gt; boolean</code>, or <code>{ validate, compare }</code>,
+          whose <code>compare(a, b)</code> gives a negative number, 0 or a positive number, so that
+          <code>formatMinimum</code>, <code>formatMaximum</code>, <code>formatExclusiveMinimum</code> and
+          <code>formatExclusiveMaximum</code> can limit its values.
+        </p>
+        <pre><code class="language-js">compileJsonSchema(schema, {
+  formats: {
+    date: true,
+    sku: /^SKU-\d+$/,
+    version: { validate: /^\d+\.\d+$/, compare: (a, b) =&gt; a.localeCompare(b, 'en', { numeric: true }) },
+  },
+});</code></pre>
+        <p>
+          <code>builtInFormats()</code> gives every built-in format as <code>{ date: true, ... }</code>, to check them
+          all and add others: <code>formats: { ...builtInFormats(), int32: false, sku: /^SKU-\d+$/ }</code>. With
+          <code>strict</code> (the default), a format the option does not name throws when compiling.
+        </p>
+
+        <h2 id="results">validate() results, toErrors and hasErrors</h2>
+        <p>
+          <code>type.validate(value)</code> (without compiling) returns <code>undefined</code> when the value is valid,
+          a message, or a list that may nest lists (combinations collect the errors of their parts).
+          <code>toErrors(result)</code> gives its messages as a flat list, each once, as the compiled function gives
+          them; <code>hasErrors(result)</code> tells whether it has any.
+        </p>
+        <pre><code class="language-js">toErrors(schema.validate(value)); // ['name is mandatory', ...]
+hasErrors(schema.validate(value)); // true</code></pre>
+
+        <h2 id="error-objects">Error objects</h2>
+        <p>With <code>errors: 'objects'</code>, each error is an object:</p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Property</th><th>Meaning</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>path</code></td><td>the keys and indexes of the value: <code>['lines', 0, 'price']</code>, <code>[]</code> for the value itself</td></tr>
+              <tr><td><code>pointer</code></td><td>the same path as a JSON Pointer: <code>'/lines/0/price'</code></td></tr>
+              <tr><td><code>keyword</code></td><td>the check that failed (see <a href="#messages">Messages and keywords</a>)</td></tr>
+              <tr><td><code>params</code></td><td>its details, <code>{}</code> when there are none</td></tr>
+              <tr><td><code>message</code></td><td>the message of the default mode</td></tr>
+              <tr><td><code>propertyName</code></td><td><code>true</code> for an error of a key checked by <code>propertyNames</code>, whose path is the one of its property</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h2 id="messages">Messages and keywords</h2>
+        <p>
+          Every message starts with the name of the value (<code>lines[0].price</code>, or <code>Value</code> for the
+          value itself). The keyword and params are the ones of error objects.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Message after the name</th><th>keyword</th><th>params</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>is mandatory</td><td><code>required</code></td><td><code>{}</code></td></tr>
+              <tr><td>cannot be null</td><td><code>nullable</code></td><td><code>{}</code></td></tr>
+              <tr><td>must be a string, a number, an integer, a boolean, an object, an array</td><td><code>type</code></td><td><code>{ type }</code></td></tr>
+              <tr><td>must be at least N characters long, at most N characters long</td><td><code>minLength</code>, <code>maxLength</code></td><td><code>{ limit }</code></td></tr>
+              <tr><td>does not match the required pattern</td><td><code>pattern</code></td><td><code>{ pattern }</code></td></tr>
+              <tr><td>must be a valid FORMAT</td><td><code>format</code></td><td><code>{ format }</code></td></tr>
+              <tr><td>must be at least N, at most N, greater than N, less than N</td><td><code>minimum</code>, <code>maximum</code>, <code>exclusiveMinimum</code>, <code>exclusiveMaximum</code></td><td><code>{ limit }</code></td></tr>
+              <tr><td>must be a multiple of N</td><td><code>multipleOf</code></td><td><code>{ multipleOf }</code></td></tr>
+              <tr><td>must be at least, at most, greater than, less than LIMIT (a format)</td><td><code>formatMinimum</code>, <code>formatMaximum</code>, <code>formatExclusiveMinimum</code>, <code>formatExclusiveMaximum</code></td><td><code>{ comparison, limit }</code></td></tr>
+              <tr><td>must be one of: A, B</td><td><code>enum</code></td><td><code>{ allowedValues }</code></td></tr>
+              <tr><td>must be equal to A</td><td><code>const</code></td><td><code>{ allowedValue }</code></td></tr>
+              <tr><td>must have at least N elements, at most N elements</td><td><code>minItems</code>, <code>maxItems</code></td><td><code>{ limit }</code></td></tr>
+              <tr><td>must not have duplicate elements</td><td><code>uniqueItems</code></td><td><code>{}</code></td></tr>
+              <tr><td>must contain at least one matching element</td><td><code>contains</code></td><td><code>{}</code></td></tr>
+              <tr><td>must contain at least N matching elements, at most N matching elements</td><td><code>minContains</code>, <code>maxContains</code></td><td><code>{ limit }</code></td></tr>
+              <tr><td>must have at least N properties, at most N properties</td><td><code>minProperties</code>, <code>maxProperties</code></td><td><code>{ limit }</code></td></tr>
+              <tr><td>(the whole message) Unexpected key: NAME</td><td><code>additionalProperties</code>, <code>unevaluatedProperties</code></td><td><code>{ property }</code></td></tr>
+              <tr><td>is mandatory when KEY is present</td><td><code>dependentRequired</code></td><td><code>{ property, missingProperty }</code></td></tr>
+              <tr><td>is not allowed</td><td><code>false</code></td><td><code>{}</code></td></tr>
+              <tr><td>must not match the excluded schema</td><td><code>not</code></td><td><code>{}</code></td></tr>
+              <tr><td>must match exactly one schema, but matches none (or more than one)</td><td><code>oneOf</code></td><td><code>{ passing }</code></td></tr>
+              <tr><td>TAG is mandatory, must be a string, must be one of: A, B</td><td><code>discriminator</code></td><td><code>{ error, tag, tagValue }</code></td></tr>
+              <tr><td>the message of a keyword of your own</td><td>its name</td><td><code>{}</code></td></tr>
+              <tr><td>the message of a type of your own</td><td><code>custom</code></td><td><code>{}</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h2 id="typescript">TypeScript types</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Type</th><th>Meaning</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>Infer&lt;typeof schema&gt;</code></td><td>the type of the values a DSL schema accepts</td></tr>
+              <tr><td><code>ErrorsFunction</code>, <code>ErrorObjectsFunction</code>, <code>IsValidFunction&lt;T&gt;</code></td><td>the compiled functions of each mode; the last one is a type guard</td></tr>
+              <tr><td><code>ErrorObject</code></td><td>an <a href="#error-objects">error object</a></td></tr>
+              <tr><td><code>CompileOptions</code>, <code>JsonSchemaOptions</code>, <code>StandaloneOptions</code>, <code>LoadSchemaOptions</code></td><td>the options above</td></tr>
+              <tr><td><code>JsonSchema</code>, <code>JsonSchemaObject</code>, <code>JsonSchemaDraft</code></td><td>a JSON Schema, and the names of the drafts</td></tr>
+              <tr><td><code>KeywordDefinition</code>, <code>AjvKeywordName</code>, <code>FormatDefinition</code>, <code>FormatName</code>, <code>FormatCheck</code></td><td>keywords and formats of your own, and the built-in names</td></tr>
+              <tr><td><code>ValidationResult</code></td><td>what <code>validate()</code> returns</td></tr>
+              <tr><td><code>StringOptions</code>, <code>NumberOptions</code>, <code>ArrayOfOptions</code>, <code>SchemaOptions</code>...</td><td>the options of each type</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </article>
+    </div>
+
+    <footer class="footer">
+      <div class="container">
+        <span>schiva is MIT licensed. &copy; Jes&uacute;s Seijas</span>
+        <span>
+          <a href="./">Home</a> &middot; <a href="guide.html">Guide</a> &middot; <a href="playground.html">Playground</a> &middot; <a href="benchmarks.html">Benchmarks</a> &middot;
+          <a href="https://github.com/jesus-seijas-sp/schiva">GitHub</a> &middot;
+          <a href="https://www.npmjs.com/package/schiva">npm</a>
+        </span>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,9 +1,12 @@
-const { ValidateType } = require('./validate-type');
+const { ValidateType, toType } = require('./validate-type');
 
 class ObjType extends ValidateType {
   constructor(options = {}) {
     super(options);
-    this.schema = options.schema;
+    // The shape as given, which a Schema around it turns into a nested schema with its options (see visitObjs()), and
+    // the type it stands for: a plain object of types is a Schema.
+    this.shape = options.schema;
+    this.schema = toType(options.schema, 'Obj schema');
   }
 
   // The field name goes to the schema as received (see AllOfType.validate()).
@@ -38,15 +41,26 @@ function Obj(options) {
   return new ObjType(options);
 }
 
+const OPTION_KEYS = ['schema', 'isMandatory', 'isNullable'];
+
+// The first argument of obj() is the options when it is a plain object that is empty or has an option key; otherwise
+// it is the shape of the object (a plain object of types), like arrOf().
+const isOptions = (value) =>
+  value !== null &&
+  typeof value === 'object' &&
+  !Array.isArray(value) &&
+  !(value instanceof ValidateType) &&
+  (Object.keys(value).length === 0 || Object.keys(value).some((key) => OPTION_KEYS.includes(key)));
+
 function obj(schema, isMandatory = true, isNullable = false) {
-  if (schema !== undefined && schema !== null && !Array.isArray(schema) && typeof schema === 'object') {
+  if (isOptions(schema)) {
     return new ObjType(schema);
   }
   return new ObjType({ schema, isMandatory, isNullable });
 }
 
 function oobj(schema, isMandatory = false, isNullable = false) {
-  if (schema !== undefined && schema !== null && !Array.isArray(schema) && typeof schema === 'object') {
+  if (isOptions(schema)) {
     return new ObjType({ isMandatory: false, ...schema });
   }
   return new ObjType({ schema, isMandatory, isNullable });

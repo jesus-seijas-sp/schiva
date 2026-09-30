@@ -28,7 +28,9 @@ function errorObject(path, keyword, params, message) {
   const keys = isPropertyName ? path.slice(0, -1).concat(last.key) : path.slice();
   let pointer = '';
   for (let i = 0; i < keys.length; i += 1) {
-    pointer += `/${`${keys[i]}`.replace(/~/g, '~0').replace(/\//g, '~1')}`;
+    const key = `${keys[i]}`;
+    // Escaped only when it has one of the two characters to escape.
+    pointer += key.includes('~') || key.includes('/') ? `/${key.replace(/~/g, '~0').replace(/\//g, '~1')}` : `/${key}`;
   }
   const error = { path: keys, pointer, keyword, params, message };
   if (isPropertyName) {

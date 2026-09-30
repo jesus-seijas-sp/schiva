@@ -214,6 +214,8 @@ export interface NumberOptions extends TypeOptions {
   exclusiveMin?: number;
   exclusiveMax?: number;
   multipleOf?: number;
+  /** Decimal digits: a division by multipleOf within 1e-multipleOfPrecision of an integer passes (0.3 of 0.1). */
+  multipleOfPrecision?: number;
 }
 export class FloatType<Out = number> extends ValidateType<Out> {
   constructor(options?: NumberOptions);
@@ -222,6 +224,7 @@ export class FloatType<Out = number> extends ValidateType<Out> {
   exclusiveMin?: number;
   exclusiveMax?: number;
   multipleOf?: number;
+  multipleOfPrecision?: number;
 }
 export class IntegerType<Out = number> extends FloatType<Out> {}
 
@@ -389,6 +392,12 @@ export type AjvKeywordName =
 
 /** Definitions of the keywords of ajv-keywords, for the option "keywords": all of them, or the ones named. */
 export function ajvKeywords(names?: AjvKeywordName | readonly AjvKeywordName[]): KeywordDefinition[];
+
+/**
+ * Every built-in format for the option "formats" ({ date: true, ... }), to add formats of your own or known ones left
+ * unchecked: formats: { ...builtInFormats(), int32: false }.
+ */
+export function builtInFormats(): { [name in FormatName]: true };
 
 export interface KeywordTypeOptions extends TypeOptions {
   keyword?: string;
@@ -722,13 +731,17 @@ export type JsonSchema = boolean | JsonSchemaObject;
 export type JsonSchemaDraft = 'draft-04' | 'draft-06' | 'draft-07' | '2019-09' | '2020-12';
 
 export interface JsonSchemaOptions {
-  /** Other documents that "$ref" can point to: { uri: schema }, or schemas with "$id". */
+  /**
+   * Other documents that "$ref" can point to: { uri: schema }, or schemas with "$id". Relative URIs ("address") are
+   * reached from schemas without "$id" ("$ref": "address#"), as in ajv and Fastify.
+   */
   schemas?: { [uri: string]: JsonSchema } | readonly JsonSchema[];
   /** The draft; by default the one "$schema" names, else draft-07. */
   draft?: JsonSchemaDraft;
   /**
    * The formats "format" checks, which is an annotation without this option: true for every built-in one, a list of
-   * built-in ones, or an object with true (a built-in one) or a check of your own for each name.
+   * built-in ones, or an object with, for each name, true (a built-in one), a check of your own, or false (known but
+   * not checked). With this option and strict: true, a format it does not name throws.
    */
   formats?: boolean | readonly FormatName[] | { [name: string]: true | false | FormatCheck | FormatDefinition };
   /**
@@ -759,6 +772,8 @@ export interface JsonSchemaOptions {
    * wraps values into arrays and takes the element of an array of one.
    */
   coerceTypes?: boolean | 'array';
+  /** Decimal digits: multipleOf accepts a division within 1e-multipleOfPrecision of an integer, as in ajv. */
+  multipleOfPrecision?: number;
 }
 
 /** The option of compileJsonSchemaAsync() and loadJsonSchemas(): gives the schema at an absolute URI. */

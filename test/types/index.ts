@@ -245,6 +245,9 @@ export { withKeywords };
 // Options that change the data.
 const versions: string[] = compileJsonSchema({}, { formats: { version: { validate: /^\d+$/, compare: (a, b) => Number(a) - Number(b) } } })('1');
 export { versions };
+const precise: string[] = compileJsonSchema({}, { multipleOfPrecision: 8 })(0.3);
+const preciseFloat = Float({ multipleOf: 0.1, multipleOfPrecision: 8 });
+export { precise, preciseFloat };
 const changing: boolean = compileJsonSchema({}, { useDefaults: 'empty', removeAdditional: 'failing', coerceTypes: 'array', errors: false })({});
 export { changing };
 

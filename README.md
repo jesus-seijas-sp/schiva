@@ -9,7 +9,10 @@ Fast schema validation for JavaScript. Describe data with a small schema DSL or 
 2020-12), and schiva compiles it into a JavaScript function generated for that schema, so validating is several times
 faster than walking the schema for every value.
 
-**Documentation: [schiva.js.org](https://schiva.js.org)**
+**Documentation: [schiva.js.org](https://schiva.js.org)** &middot; [Guide](https://schiva.js.org/guide.html) &middot;
+[Playground](https://schiva.js.org/playground.html) &middot;
+[API reference](https://schiva.js.org/api.html) &middot; [Benchmarks](https://schiva.js.org/benchmarks.html) &middot;
+[Migrating from ajv](https://schiva.js.org/migrating-from-ajv.html)
 
 ## Contents
 
@@ -246,7 +249,8 @@ node.compile()({ value: 1, children: [{ value: 2, children: [{ value: 'x' }] }] 
 `fromJsonSchema(json, options)` converts a JSON Schema into the same types, and `compileJsonSchema(json, options)`
 compiles it. Every validation keyword of draft-07 is supported, along with `definitions` (or `$defs`) and `$ref` (JSON
 pointers, `$id` base URIs and anchors, recursive schemas). String lengths count Unicode code points, as the
-specification says.
+specification says. `multipleOf` divides in floating point, so 0.3 is not a multiple of 0.1; with the option
+`multipleOfPrecision: 8`, a division within 1e-8 of an integer passes, as with ajv's option.
 
 A keyword schiva does not know throws when compiling, with the place where it was found:
 
@@ -407,9 +411,13 @@ validate({ email: 'x', since: '2026-02-30' }); // ['email must be a valid email'
   `json-pointer`, `relative-json-pointer` and `regex`.
 - `formats: ['email', 'date']` checks only those.
 - `formats: { phone: /^\+\d+$/, even: (text) => text.length % 2 === 0, email: true }` adds formats of your own, a regular
-  expression or a function, and `true` picks a built-in one.
+  expression or a function, and `true` picks a built-in one. `false` names a format that is known but not checked, such
+  as OpenAPI's `int32`.
+- `formats: { ...builtInFormats(), int32: false }` checks every built-in format and adds your own.
 
-A format applies to strings only, and one the option does not name is not checked. The built-in formats follow their
+With the option, a format it does not name throws when compiling, as in ajv's strict mode, since it is most likely a
+typo (`"emial"`): name it, with `false` to leave it unchecked, or use `strict: false` to ignore unknown formats. Without
+the option, any format is an annotation. A format applies to strings only. The built-in formats follow their
 RFCs: dates and times with leap years and leap seconds (RFC 3339), email addresses with quoted local parts and IP
 literals, and internationalized host names with punycode, IDNA2008 and the Bidi rule. schiva passes every test of
 the optional format tests of the JSON-Schema-Test-Suite (793 of draft-07, 874 of 2019-09 and of 2020-12;
@@ -671,6 +679,8 @@ not in public issues.
 Compared with ajv and the other validators of
 [json-schema-benchmark](https://github.com/ebdrup/json-schema-benchmark), each measurement in its own process
 (see [`bench/`](bench)). Higher is better; each library is compared in the same mode (first error or all errors).
+Every library, every payload, the tests each one passes and the speed of the features are on the
+[benchmarks page](https://schiva.js.org/benchmarks.html).
 
 **JSON-Schema-Test-Suite**, in runs per second over the test groups every validator passes. For drafts 2019-09 and
 2020-12 only the validators that implement them run (ajv with its `Ajv2019` and `Ajv2020` classes):

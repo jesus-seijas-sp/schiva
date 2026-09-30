@@ -65,10 +65,12 @@ class Schema {
       const value = this.schema[key];
       if (!(value instanceof Schema)) {
         if (!(value instanceof ValidateType)) {
-          const obj = new ObjType({ schema: value });
-          this.schema[key] = new Schema(obj.schema, options);
-        } else if (value instanceof ObjType) {
-          this.schema[key] = new Schema(value.schema, options);
+          this.schema[key] = new Schema(value, options);
+        } else if (
+          value instanceof ObjType &&
+          !(value.schema instanceof ValidateType && !(value.schema instanceof Schema))
+        ) {
+          this.schema[key] = new Schema(value.shape instanceof Schema ? value.shape.schema : value.shape, options);
         }
       }
     }

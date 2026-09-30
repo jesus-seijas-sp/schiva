@@ -326,6 +326,15 @@ function isULabel(label) {
 // Whether a host name, after UTS 46 mapping when `isIdn`, is valid: labels of at most 63 octets (as A-labels), at most
 // 253 octets in all, ASCII letters, digits and hyphens, and A-labels ("xn--") and U-labels that are valid.
 function hasValidLabels(value, isIdn) {
+  // A name of letter-digit-hyphen labels needs no mapping and has no right-to-left label: without "--" in the third and
+  // fourth positions of a label (RFC 5891), which only a punycode label ("xn--") may have and the full check reads, it
+  // only has to be at most 253 characters long.
+  if (
+    /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$/.test(value) &&
+    !/(?:^|\.)[A-Za-z0-9-]{2}--/.test(value)
+  ) {
+    return value.length <= 253;
+  }
   const mapped = isIdn
     ? value
         .normalize('NFKC')
@@ -403,8 +412,10 @@ function isEmailWith(value, isIdn, isHost) {
   }
   const local = value.slice(0, at);
   const domain = value.slice(at + 1);
-  const atom = isIdn ? "[A-Za-z0-9!#$%&'*+/=?^_`{|}~\\u0080-\\u{10FFFF}-]" : "[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]";
-  const dotAtom = new RegExp(`^${atom}+(?:\\.${atom}+)*$`, 'u');
+  // Literals, which are compiled once (a RegExp made here would be compiled on every call).
+  const dotAtom = isIdn
+    ? /^[A-Za-z0-9!#$%&'*+/=?^_`{|}~\u0080-\u{10FFFF}-]+(?:\.[A-Za-z0-9!#$%&'*+/=?^_`{|}~\u0080-\u{10FFFF}-]+)*$/u
+    : /^[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+)*$/;
   // A quoted local part: printable ASCII but '"' and '\', which are escaped, and in idn-email other characters too.
   const quoted = isIdn
     ? /^"(?:[\x20\x21\x23-\x5B\x5D-\x7E\u0080-\u{10FFFF}]|\\[\x20-\x7E])*"$/u
@@ -412,7 +423,7 @@ function isEmailWith(value, isIdn, isHost) {
   if (!dotAtom.test(local) && !quoted.test(local)) {
     return false;
   }
-  const literal = /^\[(?:IPv6:(.+)|(.+))\]$/i.exec(domain);
+  const literal = domain.charCodeAt(0) === 0x5b ? /^\[(?:IPv6:(.+)|(.+))\]$/i.exec(domain) : null;
   if (literal) {
     return literal[1] !== undefined ? isIpv6(literal[1]) : isIpv4(literal[2]);
   }

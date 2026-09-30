@@ -1,6 +1,12 @@
 const { ClosedSchema } = require('./closed-schema');
 const { compileErrors, compileFirstError, compileIsValid, compileType } = require('./compile');
-const { fromJsonSchema, compileJsonSchema, compileJsonSchemaAsync, loadJsonSchemas } = require('./json-schema');
+const {
+  fromJsonSchema,
+  compileJsonSchema,
+  compileJsonSchemaAsync,
+  loadJsonSchemas,
+  builtInFormats,
+} = require('./json-schema');
 const { Schema } = require('./schema');
 const { standaloneCode, standaloneModule, standaloneJsonSchema } = require('./standalone');
 const { ajvKeywords } = require('./ajv-keywords');
@@ -158,4 +164,5 @@ module.exports = {
   standaloneJsonSchema,
   KeywordType,
   ajvKeywords,
+  builtInFormats,
 };

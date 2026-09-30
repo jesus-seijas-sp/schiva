@@ -9,43 +9,16 @@
 // (draft7, draft2019-09 or draft2020-12), each with the validators that implement it.
 //
 // The child processes are started by this script: node isolated.js --child <kind> <arguments...>
-const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const validators = require('./validators');
+const { RUNS, measure, runChildren: runMeasured } = require('./lib/measure');
 
 const { forDraft } = validators;
 const { cases, compileCase, prepareCase } = require('./lib/cases');
 const { loadRemotes, loadGroups, compileGroup, evaluate, commonGroups, suiteRun, summary } = require('./lib/suite');
 
 const RESULTS = path.join(__dirname, 'results');
-const RUNS = Number(process.env.BENCH_RUNS) || 3;
-const TIME = Number(process.env.BENCH_TIME) || 1000;
-const WARMUP = Math.max(200, TIME / 3);
-
-// Calls per second of `fn`, timed for TIME ms after a warm-up. Calls are made in batches that take at least 1 ms, so
-// reading the clock does not weigh on fast functions and slow ones still stop on time.
-function measure(fn) {
-  const now = () => Number(process.hrtime.bigint()) / 1e6;
-  let batch = 1;
-  for (;;) {
-    const start = now();
-    for (let i = 0; i < batch; i += 1) fn();
-    if (now() - start >= 1 || batch >= 2 ** 24) break;
-    batch *= 2;
-  }
-  const warmupEnd = now() + WARMUP;
-  while (now() < warmupEnd) for (let i = 0; i < batch; i += 1) fn();
-  let count = 0;
-  const start = now();
-  let end;
-  do {
-    for (let i = 0; i < batch; i += 1) fn();
-    count += batch;
-    end = now();
-  } while (end - start < TIME);
-  return (count * 1000) / (end - start);
-}
 
 // Child process: prints the calls per second of one measurement.
 function child(kind, args) {
@@ -70,19 +43,8 @@ function child(kind, args) {
   console.log(measure(fn));
 }
 
-// Median, and spread as the percentage between the lowest and highest run, over RUNS processes.
-function runChildren(args) {
-  const values = Array.from({ length: RUNS }, () =>
-    Number(
-      execFileSync(process.execPath, ['--no-deprecation', __filename, '--child', ...args], {
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'ignore'],
-      }).trim()
-    )
-  ).sort((a, b) => a - b);
-  const median = values[Math.floor(values.length / 2)];
-  return { opsPerSec: median, spread: (100 * (values[values.length - 1] - values[0])) / median };
-}
+// Median and spread of the measurement of these arguments in child processes (see lib/measure.js).
+const runChildren = (args) => runMeasured(__filename, args);
 
 function suite(draft) {
   const remotes = loadRemotes(draft);

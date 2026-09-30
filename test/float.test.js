@@ -1,4 +1,4 @@
-const { Float } = require('../src');
+const { Float, Integer, compileJsonSchema } = require('../src');
 
 describe('Float Type', () => {
   it('Should allow undefined if not mandatory', () => {
@@ -66,5 +66,31 @@ describe('Float Type', () => {
     expect(type.validate(0)).toBe('Value must be greater than 0');
     expect(type.validate(10)).toBe('Value must be less than 10');
     expect(type.validate(5)).toBeUndefined();
+  });
+});
+
+describe('multipleOfPrecision', () => {
+  it('Should accept a division within 1e-precision of an integer, as ajv', () => {
+    const schema = { type: 'number', multipleOf: 0.1 };
+    expect(compileJsonSchema(schema)(0.3)).toEqual(['Value must be a multiple of 0.1']);
+    expect(compileJsonSchema(schema, { multipleOfPrecision: 8 })(0.3)).toEqual([]);
+    expect(compileJsonSchema(schema, { multipleOfPrecision: 8, errors: false })(0.35)).toBe(false);
+    expect(compileJsonSchema({ type: 'integer', multipleOf: 3 }, { multipleOfPrecision: 8 })(10)).toEqual([
+      'Value must be a multiple of 3',
+    ]);
+  });
+
+  it('Should work in the DSL', () => {
+    expect(new Float({ multipleOf: 0.1, multipleOfPrecision: 8 }).validate(0.3)).toBeUndefined();
+    expect(new Float({ multipleOf: 0.1, multipleOfPrecision: 8 }).compile()(0.35)).toEqual([
+      'Value must be a multiple of 0.1',
+    ]);
+    expect(Integer({ multipleOf: 2, multipleOfPrecision: 4 }).isValid(4)).toBe(true);
+  });
+
+  it('Should throw on an invalid option', () => {
+    expect(() => compileJsonSchema({}, { multipleOfPrecision: 0 })).toThrow(
+      'Unsupported JSON Schema option "multipleOfPrecision": expected a positive integer'
+    );
   });
 });

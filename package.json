@@ -1,6 +1,6 @@
 {
   "name": "schiva",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Fast schema validation for JavaScript: a schema DSL and JSON Schema (draft-07, 2019-09, 2020-12), compiled to generated code",
   "homepage": "https://schiva.js.org",
   "repository": {
@@ -24,7 +24,8 @@
     "bench:quick": "cd bench && pnpm install && pnpm run quick",
     "conformance": "cd bench && pnpm install && pnpm run conformance",
     "test:types": "tsc -p test/types",
-    "build:helpers": "node scripts/generate-standalone-helpers.js && eslint --fix src/standalone-helpers.js"
+    "build:helpers": "node scripts/generate-standalone-helpers.js && eslint --fix src/standalone-helpers.js",
+    "build:browser": "node scripts/build-browser.js"
   },
   "keywords": [
     "schema",

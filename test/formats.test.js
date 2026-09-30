@@ -1,5 +1,13 @@
 const vm = require('vm');
-const { Schema, String, compileJsonSchema, fromJsonSchema, standaloneJsonSchema, toErrors } = require('../src');
+const {
+  Schema,
+  String,
+  builtInFormats,
+  compileJsonSchema,
+  fromJsonSchema,
+  standaloneJsonSchema,
+  toErrors,
+} = require('../src');
 const { FORMATS, FORMAT_FUNCTIONS, matchesFormat } = require('../src/formats');
 const { HELPER_SOURCES } = require('../src/standalone-helpers');
 
@@ -29,21 +37,48 @@ describe('Formats', () => {
     expect(check(schema, value)).toEqual([]);
   });
 
-  it('Should check every built-in format with formats: true, and ignore unknown ones', () => {
-    expect(check(schema, value, { formats: true })).toEqual([
+  it('Should check every built-in format with formats: true', () => {
+    // "phone" is not a built-in format: it is named as known but not checked.
+    const formats = { ...builtInFormats(), phone: false };
+    expect(check(schema, value, { formats })).toEqual([
       'email must be a valid email',
       'when must be a valid date',
       'id must be a valid uuid',
     ]);
-    expect(check(schema, { email: 'a@example.com', when: '2024-02-29', id: null }, { formats: true })).toEqual([]);
+    expect(check(schema, { email: 'a@example.com', when: '2024-02-29', id: null }, { formats })).toEqual([]);
+    expect(builtInFormats()).toEqual(Object.fromEntries(Object.keys(FORMATS).map((name) => [name, true])));
+  });
+
+  it('Should throw on a format the option does not name, as ajv does in strict mode, or ignore it with strict: false', () => {
+    const typo = { properties: { email: { type: 'string', format: 'emial' } } };
+    expect(() => compileJsonSchema(typo, { formats: true })).toThrow(
+      'Unknown JSON Schema format "emial" at #.properties.email: name it in the option "formats" ({ "emial": false } leaves it unchecked), or use strict: false'
+    );
+    expect(check(typo, { email: 'x' }, { formats: true, strict: false })).toEqual([]);
+    // Without the option, "format" is an annotation, and any name is accepted.
+    expect(check(typo, { email: 'x' })).toEqual([]);
+    // A list names the only formats known.
+    expect(() => compileJsonSchema({ format: 'uuid' }, { formats: ['email'] })).toThrow(
+      'Unknown JSON Schema format "uuid"'
+    );
+    // Also in schemas reached through "$ref", and on values of other types (OpenAPI's int32).
+    const referenced = { $defs: { a: { format: 'nope' } }, properties: { x: { $ref: '#/$defs/a' } } };
+    expect(() => compileJsonSchema(referenced, { formats: true })).toThrow('format "nope" at #/$defs/a');
+    const openApi = { properties: { n: { type: 'integer', format: 'int32' }, e: { type: 'string', format: 'email' } } };
+    expect(() => compileJsonSchema(openApi, { formats: true })).toThrow('Unknown JSON Schema format "int32"');
+    expect(check(openApi, { n: 1, e: 'x' }, { formats: { ...builtInFormats(), int32: false } })).toEqual([
+      'e must be a valid email',
+    ]);
   });
 
   it('Should check only the formats a list names', () => {
-    expect(check(schema, value, { formats: ['date'] })).toEqual(['when must be a valid date']);
+    expect(check(schema, value, { formats: ['date'], strict: false })).toEqual(['when must be a valid date']);
+    const onlyDate = { date: true, email: false, uuid: false, phone: false };
+    expect(check(schema, value, { formats: onlyDate })).toEqual(['when must be a valid date']);
   });
 
   it('Should check formats of your own, a regular expression or a function', () => {
-    const formats = { phone: /^\+\d+$/, email: true, even: (text) => text.length % 2 === 0 };
+    const formats = { phone: /^\+\d+$/, email: true, even: (text) => text.length % 2 === 0, date: false, uuid: false };
     const own = { properties: { ...schema.properties, code: { format: 'even' } } };
     expect(check(own, { phone: '12', email: 'a@b.co', code: 'abc' }, { formats })).toEqual([
       'phone must be a valid phone',
@@ -59,7 +94,7 @@ describe('Formats', () => {
   it('Should throw on a wrong option', () => {
     expect(() => compileJsonSchema({}, { formats: ['phone'] })).toThrow('"phone" is not one of date, time');
     expect(() => compileJsonSchema({}, { formats: { a: 1 } })).toThrow(
-      '"a" must be true, a regular expression, a function or { validate, compare }'
+      '"a" must be true, false, a regular expression, a function or { validate, compare }'
     );
     expect(() => compileJsonSchema({}, { formats: 'all' })).toThrow('expected true, a list of names or an object');
   });
@@ -162,7 +197,8 @@ describe('Formats', () => {
   });
 
   it('Should write the format helpers into standalone code, and run them without code generation', () => {
-    const code = standaloneJsonSchema(schema, { formats: true });
+    const formats = { ...builtInFormats(), phone: false };
+    const code = standaloneJsonSchema(schema, { formats });
     expect(code).toContain('function isEmail(');
     expect(code).toContain('function isDate(');
     expect(code).not.toContain('function isIdnHostname(');
@@ -170,11 +206,12 @@ describe('Formats', () => {
     const module = { exports: {} };
     vm.runInContext(`(function (module) {\n${code}\n})`, context)(module);
     const parse = vm.runInContext('JSON.parse', context);
-    const compiled = compileJsonSchema(schema, { formats: true });
+    const compiled = compileJsonSchema(schema, { formats });
     expect(JSON.parse(JSON.stringify(module.exports(parse(JSON.stringify(value)))))).toEqual(compiled(value));
     // A regular expression of your own can be written out; a function cannot.
-    expect(standaloneJsonSchema(schema, { formats: { phone: /^\+\d+$/ } })).toContain('new RegExp(');
-    expect(() => standaloneJsonSchema(schema, { formats: { phone: (text) => text !== '' } })).toThrow(
+    const others = { email: false, date: false, uuid: false };
+    expect(standaloneJsonSchema(schema, { formats: { ...others, phone: /^\+\d+$/ } })).toContain('new RegExp(');
+    expect(() => standaloneJsonSchema(schema, { formats: { ...others, phone: (text) => text !== '' } })).toThrow(
       'Standalone code cannot contain the function'
     );
   });

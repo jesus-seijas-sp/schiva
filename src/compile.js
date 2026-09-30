@@ -47,6 +47,32 @@ const { hasDuplicates } = require('./types/has-duplicates');
 const { JSON_TYPES, UnevaluatedType, staticEvaluatedBy, staticEvaluatedByAll } = require('./unevaluated');
 const { errorObject, pathName } = require('./error-objects');
 
+// The path of error objects that the code `path` gives when it is the same for every value (keys and positions
+// written in the schema, out of loops): an array of keys and indexes, else undefined.
+function staticPath(path) {
+  if (!path.startsWith('[') || !path.endsWith(']')) {
+    return undefined;
+  }
+  try {
+    const value = JSON.parse(path);
+    return Array.isArray(value) && value.every((item) => typeof item === 'string' || Number.isInteger(item))
+      ? value
+      : undefined;
+  } catch (e) {
+    return undefined;
+  }
+}
+
+// A literal (key or index) of the code `code`, or undefined when it is worked out when validating.
+function literalOf(code) {
+  try {
+    const value = JSON.parse(code);
+    return typeof value === 'string' || Number.isInteger(value) ? value : undefined;
+  } catch (e) {
+    return undefined;
+  }
+}
+
 // Compiles a type tree into a single generated function, like ajv does, so validating a value runs inline code
 // instead of one isValid()/errors() call per node. There are three modes:
 // - check: returns true or false, like isValid().
@@ -358,9 +384,25 @@ class Generator {
     if (this.mode === 'check') {
       return this.fail;
     }
-    const text = message();
+    let text = message();
+    let { path } = message;
+    // A path known when compiling: the error object is written out, pointer included, like errorObject() builds it.
+    const known = this.structured ? staticPath(path) : undefined;
+    if (known) {
+      const pointer = known.map((key) => `/${`${key}`.replace(/~/g, '~0').replace(/\//g, '~1')}`).join('');
+      const object = `{ path: ${path}, pointer: ${JSON.stringify(pointer)}, keyword: ${JSON.stringify(message.keyword)}, params: ${message.params}, message: ${text} }`;
+      return this.mode === 'first' ? `return ${object};` : `out = P(out, ${object});`;
+    }
+    let assign = '';
+    // A path that is built (not the variable of a function, or []) is built once, in variable q, for the object and
+    // its message.
+    if (this.structured && path.length > 3) {
+      text = text.split(path).join('q');
+      assign = `q = ${path}, `;
+      path = 'q';
+    }
     const error = this.structured
-      ? `${this.constant(errorObject)}(${message.path}, ${JSON.stringify(message.keyword)}, ${message.params}, ${text})`
+      ? `(${assign}${this.constant(errorObject)}(${path}, ${JSON.stringify(message.keyword)}, ${message.params}, ${text}))`
       : text;
     // The list of errors is only made with the first one: valid values build none.
     return this.mode === 'first' ? `return ${error};` : `out = P(out, ${error});`;
@@ -376,23 +418,45 @@ class Generator {
     if (!this.structured) {
       return isSchema ? schemaName(path) : valuePath(path);
     }
+    // A path known when compiling has its name written out.
+    const known = staticPath(path);
+    if (known) {
+      return JSON.stringify(pathName(known));
+    }
     const name = `${this.constant(pathName)}(${path})`;
     return isSchema ? `(${name} || "Value")` : name;
   }
 
   // Code of the path of the key `key` (code) of the object at `path`.
   keyOf(path, key) {
-    return this.structured ? `${path}.concat([${key}])` : keyPath(path, key);
+    if (!this.structured) {
+      return keyPath(path, key);
+    }
+    const known = staticPath(path);
+    if (known && literalOf(key) !== undefined) {
+      return JSON.stringify([...known, literalOf(key)]);
+    }
+    return path === '[]' ? `[${key}]` : `${path}.concat([${key}])`;
   }
 
   // Code of the path of the element `index` (code) of the array at `path`, whose name is `name`.
   indexOf(path, name, index) {
-    return this.structured ? `${path}.concat([${index}])` : `(${name} + "[" + ${index} + "]")`;
+    if (!this.structured) {
+      return `(${name} + "[" + ${index} + "]")`;
+    }
+    const known = staticPath(path);
+    if (known && literalOf(String(index)) !== undefined) {
+      return JSON.stringify([...known, literalOf(String(index))]);
+    }
+    return path === '[]' ? `[${index}]` : `${path}.concat([${index}])`;
   }
 
   // Code of the path of a key checked by propertyNames, as a value: its name is "Key <name>".
   propertyNameOf(path, key) {
-    return this.structured ? `${path}.concat([{ key: ${key} }])` : `("Key " + ${keyPath(path, key)})`;
+    if (!this.structured) {
+      return `("Key " + ${keyPath(path, key)})`;
+    }
+    return path === '[]' ? `[{ key: ${key} }]` : `${path}.concat([{ key: ${key} }])`;
   }
 
   // Checks [condition, message, pre] run in order until one fails; `rest` runs when none fails. The optional `pre`
@@ -475,7 +539,11 @@ class Generator {
       const { visiting, fail } = this;
       this.visiting = new Set();
       this.fail = 'return false;';
-      const body = this.inScope(() => this.generate(target, 'x', this.mode === 'check' ? 'undefined' : 'p'));
+      let body = this.inScope(() => this.generate(target, 'x', this.mode === 'check' ? 'undefined' : 'p'));
+      // The variable of the paths of error objects (see emit()).
+      if (this.structured && this.mode !== 'check') {
+        body = `let q;\n${body}`;
+      }
       this.visiting = visiting;
       this.fail = fail;
       this.functions.push(`function ${name}(${params}) {\n${body}${end}\n}\n`);
@@ -753,8 +821,14 @@ class Generator {
         ]),
     ];
     if (type.multipleOf !== undefined) {
+      const division = `${v} / ${this.number(type.multipleOf)}`;
+      // Like FloatType.isMultiple().
+      const notMultiple =
+        type.multipleOfPrecision === undefined
+          ? `!Number.isInteger(${division})`
+          : `Math.abs(Math.round(${division}) - ${division}) > 1e-${type.multipleOfPrecision}`;
       checks.push([
-        `!Number.isInteger(${v} / ${this.number(type.multipleOf)})`,
+        notMultiple,
         text(
           ` must be a multiple of ${type.multipleOf}`,
           'multipleOf',
@@ -1615,7 +1689,9 @@ class Generator {
         this.mayRepeat ? '(out === undefined ? [] : out.length > 1 ? U(out) : out)' : '(out === undefined ? [] : out)',
       ],
     };
-    const [start, end] = results[this.mode];
+    const [declared, end] = results[this.mode];
+    // The variable of the paths of error objects (see emit()).
+    const start = this.structured && this.mode !== 'check' ? `${declared}let q;\n` : declared;
     const prologue = [
       '"use strict";',
       'const H = Object.prototype.hasOwnProperty;',

@@ -23,10 +23,11 @@
         <a class="logo" href="./"><span class="logo-mark">s</span>schiva</a>
         <nav class="nav">
           <a href="guide.html" aria-current="page">Guide</a>
-          <a class="hide-small" href="#performance">Performance</a>
+          <a href="playground.html">Playground</a>
+          <a href="api.html">API</a>
+          <a class="hide-small" href="benchmarks.html">Benchmarks</a>
           <a class="hide-small" href="migrating-from-ajv.html">From ajv</a>
           <a href="https://github.com/jesus-seijas-sp/schiva">GitHub</a>
-          <a class="hide-small" href="https://www.npmjs.com/package/schiva">npm</a>
           <button class="theme-toggle" type="button" aria-label="Switch between light and dark theme">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
               <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />
@@ -62,15 +63,18 @@
           <li><a href="#performance">Performance</a></li>
           <li><a href="#faq">FAQ</a></li>
           <li><a href="migrating-from-ajv.html">Migrating from ajv</a></li>
+          <li><a href="api.html">API reference</a></li>
+          <li><a href="benchmarks.html">Benchmarks</a></li>
         </ul>
       </aside>
 
       <article class="content">
         <h1>Guide</h1>
         <p class="intro">
-          schiva validates JavaScript values against a schema written with its DSL or with JSON Schema (draft-07,
-          2019-09 or 2020-12). It compiles the schema into a function generated for it, which returns the errors it
-          finds.
+          schiva checks that JavaScript values have the shape you expect. You describe that shape with a schema,
+          written in JavaScript with its own syntax or in JSON Schema (any version from draft-04 to 2020-12). schiva
+          compiles the schema once into a function, and that function returns the list of errors of each value you
+          give it: an empty list when the value is valid.
         </p>
 
         <h2 id="getting-started">Getting started</h2>
@@ -313,7 +317,9 @@ node.compile()({ value: 1, children: [{ value: 2, children: [{ value: 'x' }] }] 
           <code>compileJsonSchema(json, options)</code> compiles it. Every validation keyword of draft-07 is
           supported, along with <code>definitions</code> (or <code>$defs</code>) and <code>$ref</code> (JSON pointers,
           <code>$id</code> base URIs and anchors, recursive schemas). String lengths count Unicode code points, as the
-          specification says. Drafts 04, 06, 2019-09 and 2020-12 are supported completely: see
+          specification says. <code>multipleOf</code> divides in floating point, so 0.3 is not a multiple of 0.1; with
+          the option <code>multipleOfPrecision: 8</code>, a division within 1e-8 of an integer passes, as with ajv's
+          option. Drafts 04, 06, 2019-09 and 2020-12 are supported completely: see
           <a href="#drafts">Drafts</a>.
         </p>
 
@@ -523,10 +529,18 @@ validate({ email: 'x', since: '2026-02-30' }); // ['email must be a valid email'
           <li>
             <code>formats: { phone: /^\+\d+$/, even: (text) =&gt; text.length % 2 === 0, email: true }</code> adds
             formats of your own, a regular expression or a function, and <code>true</code> picks a built-in one.
+            <code>false</code> names a format that is known but not checked, such as OpenAPI's <code>int32</code>.
+          </li>
+          <li>
+            <code>formats: { ...builtInFormats(), int32: false }</code> checks every built-in format and adds your own
+            (<code>builtInFormats()</code> gives <code>{ date: true, ... }</code>).
           </li>
         </ul>
         <p>
-          A format applies to strings only, and one the option does not name is not checked. The built-in formats
+          With the option, a format it does not name throws when compiling, as in ajv's strict mode, since it is most
+          likely a typo (<code>"emial"</code>): name it, with <code>false</code> to leave it unchecked, or use
+          <code>strict: false</code> to ignore unknown formats, as the standard reads them. Without the option, any
+          format is an annotation. A format applies to strings only. The built-in formats
           follow their RFCs: dates and times with leap years and leap seconds (RFC 3339), email addresses with quoted
           local parts and IP literals, and internationalized host names with punycode, IDNA2008 and the Bidi rule.
           schiva passes every test of the optional format tests of the JSON-Schema-Test-Suite (793 of draft-07, 874 of
@@ -662,6 +676,12 @@ validate({ children: [{ daat: 1 }] }); // ['Unexpected key: children[0].daat']</
   schemas: { 'https://example.com/schemas/address.json': addressSchema },
 });</code></pre>
         <p>
+          URIs can also be relative, as ajv and Fastify allow: a document with <code>"$id": "address"</code> is reached
+          by <code>"$ref": "address#"</code> from a schema without <code>$id</code> (or with a relative one).
+        </p>
+        <pre><code class="language-js">const address = { $id: 'address', type: 'object', required: ['city'], properties: { city: { type: 'string' } } };
+compileJsonSchema({ properties: { home: { $ref: 'address#' } } }, { schemas: [address] });</code></pre>
+        <p>
           To load them instead, <code>compileJsonSchemaAsync(json, options)</code> asks
           <code>options.loadSchema(uri)</code>, an async function you write, for each document the schema references
           and <code>schemas</code> does not have, and for the ones those reference in turn, once each (like ajv's
@@ -791,6 +811,10 @@ class Even extends ValidateType {
 new Schema({ n: new Even() }).compile()({ n: 3 }); // ['n must be even']</code></pre>
 
         <h2 id="api">API</h2>
+        <p>
+          The main functions; the <a href="api.html">API reference</a> lists every function, type, option and error
+          message.
+        </p>
         <div class="table-wrap">
           <table>
             <thead>
@@ -853,7 +877,9 @@ new Schema({ n: new Even() }).compile()({ n: 3 }); // ['n must be even']</code><
         <p>
           Faster than ajv in every benchmark we run. Compared with ajv and the other validators of
           <a href="https://github.com/ebdrup/json-schema-benchmark">json-schema-benchmark</a>, each measurement in its
-          own process. Higher is better; each library is compared in the same mode (first error or all errors).
+          own process. Higher is better; each library is compared in the same mode (first error or all errors). The
+          <a href="benchmarks.html">benchmarks page</a> has every library, every payload, the tests each one passes, and
+          the speed of the features (keywords of your own, defaults, coercion, formats, error objects, standalone code).
         </p>
         <h3 id="performance-suite">JSON-Schema-Test-Suite</h3>
         <p>
@@ -955,7 +981,7 @@ pnpm run conformance   # tests passed by schiva and ajv, file by file, for one d
       <div class="container">
         <span>schiva is MIT licensed. © Jesús Seijas</span>
         <span>
-          <a href="./">Home</a> · <a href="https://github.com/jesus-seijas-sp/schiva">GitHub</a> ·
+          <a href="./">Home</a> · <a href="playground.html">Playground</a> · <a href="https://github.com/jesus-seijas-sp/schiva">GitHub</a> ·
           <a href="https://www.npmjs.com/package/schiva">npm</a> · <a href="https://js.org">js.org</a>
         </span>
       </div>

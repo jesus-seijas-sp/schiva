@@ -87,7 +87,9 @@ const validators = [
   {
     name: 'schiva',
     compile: (schema, remotes) => {
-      const options = { schemas: clone(remotes), formats, draft: schivaDraft };
+      // The format tests follow the standard, where an unknown format is ignored: strict mode throws on it (as ajv's
+      // does, which also runs with strict: false here).
+      const options = { schemas: clone(remotes), formats, draft: schivaDraft, ...(formats && { strict: false }) };
       const fn = standalone
         ? loadStandalone(standaloneJsonSchema(clone(schema), options))
         : compileJsonSchema(clone(schema), options);

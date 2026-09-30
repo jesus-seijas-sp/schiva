@@ -83,8 +83,9 @@ function followPointer(node, pointer) {
   return current;
 }
 
-// Documents to register, from { uri: schema } or [schema with "$id"]. URIs must be absolute, without a fragment other
-// than an empty one ("http://json-schema.org/draft-07/schema#").
+// Documents to register, from { uri: schema } or [schema with "$id"], without a fragment other than an empty one
+// ("http://json-schema.org/draft-07/schema#"). A relative URI ("address", as Fastify and ajv allow) is resolved against
+// the base URI of a schema without "$id", so "$ref": "address#" in such a schema reaches it.
 function documentsOf(schemas) {
   if (schemas === undefined) {
     return [];
@@ -98,10 +99,10 @@ function documentsOf(schemas) {
     throw new Error('Unsupported JSON Schema option "schemas": expected an object of schemas by URI or an array');
   }
   return entries.map(([uri, schema]) => {
-    const absolute = typeof uri === 'string' ? resolveUri(uri, undefined) : undefined;
+    const absolute = typeof uri === 'string' && uri !== '' ? resolveUri(uri, DEFAULT_BASE) : undefined;
     const [document, fragment] = absolute === undefined ? [] : splitFragment(absolute);
     if (absolute === undefined || fragment !== '') {
-      throw new Error(`Unsupported JSON Schema option "schemas": "${uri}" is not an absolute URI without fragment`);
+      throw new Error(`Unsupported JSON Schema option "schemas": "${uri}" is not a URI without fragment`);
     }
     return { uri: document, schema };
   });

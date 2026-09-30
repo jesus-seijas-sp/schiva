@@ -6,6 +6,7 @@ const {
   Conditional,
   Integer,
   Not,
+  Obj,
   OneOf,
   Ref,
   Schema,
@@ -13,6 +14,8 @@ const {
   When,
   arrOf,
   oarrOf,
+  obj,
+  oobj,
 } = require('../src');
 
 // A plain object where a type is expected stands for new Schema(object), as it does for a key of a Schema.
@@ -114,5 +117,23 @@ describe('Plain objects as types', () => {
     expect(() => new Schema({}, { additionalType: true })).toThrow(
       'Schema additionalType must be a type or an object of types'
     );
+  });
+});
+
+describe('Obj and obj()', () => {
+  it('Should check the shape given as schema, compiled or not', () => {
+    const type = Obj({ schema: { a: Integer() } });
+    expect(type.compile()({ a: 'x' })).toEqual(['a must be a number']);
+    expect(type.validate({ a: 1 })).toEqual([]);
+    expect(Obj().compile()('x')).toEqual(['Value must be an object']);
+  });
+
+  it('Should take a shape or the options in obj() and oobj()', () => {
+    expect(obj({ a: Integer() }).compile()({ a: 'x' })).toEqual(['a must be a number']);
+    expect(obj({ schema: { a: Integer() }, isNullable: true }).compile()(null)).toEqual([]);
+    expect(oobj({ a: Integer() }).compile()(undefined)).toEqual([]);
+    expect(new Schema({ inner: obj({ a: Integer() }) }).compile()({ inner: { a: 'x' } })).toEqual([
+      'inner.a must be a number',
+    ]);
   });
 });
