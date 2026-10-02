@@ -1310,12 +1310,15 @@ convertNode = (node, path, isMandatory) => {
   const type = combine(constraints, AllOfType);
   type.isMandatory = isMandatory;
   type.isNullable = acceptsNull(node);
-  // With coerceTypes, the value is converted to its types where it is read (see coerce.js).
-  const coerceTo = typeNames.filter(
+  // With coerceTypes, the value is converted to its types where it is read (see coerce.js). "nullable": true adds
+  // null to them, as in ajv: null is kept (not converted to '' or 0), and '', 0 and false may become null.
+  const coerceTypes =
+    json.nullable === true && typeNames.length > 0 && !typeNames.includes('null') ? [...typeNames, 'null'] : typeNames;
+  const coerceTo = coerceTypes.filter(
     (typeName) => COERCIBLE.includes(typeName) || (typeName === 'array' && context.coerceTypes === 'array')
   );
   if (context.coerceTypes && coerceTo.length > 0) {
-    type.coerceSpec = { types: typeNames, to: coerceTo, array: context.coerceTypes === 'array' };
+    type.coerceSpec = { types: coerceTypes, to: coerceTo, array: context.coerceTypes === 'array' };
   }
   return type;
 };

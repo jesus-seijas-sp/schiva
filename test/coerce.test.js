@@ -59,6 +59,19 @@ describe('coerceTypes', () => {
     expect(property({ type: ['number', 'boolean'] }, 'true').data).toEqual({ v: true });
   });
 
+  it('Should take nullable: true as a type null after the others, as ajv does', () => {
+    expect(property({ type: 'string', nullable: true }, null).data).toEqual({ v: null });
+    expect(property({ type: 'number', nullable: true }, null).data).toEqual({ v: null });
+    expect(property({ type: 'boolean', nullable: true }, null).data).toEqual({ v: null });
+    expect(property({ type: 'string', nullable: true }, 5).data).toEqual({ v: '5' });
+    expect(property({ type: 'number', nullable: true }, '').data).toEqual({ v: null });
+    expect(property({ type: 'number', nullable: true }, false).data).toEqual({ v: 0 });
+    expect(property({ type: 'array', items: { type: 'number' }, nullable: true }, null).data).toEqual({ v: null });
+    expect(
+      property({ type: 'array', items: { type: 'number' }, nullable: true }, '3', { coerceTypes: 'array' }).data
+    ).toEqual({ v: [3] });
+  });
+
   it('Should check the converted value', () => {
     expect(property({ type: 'integer', minimum: 5 }, '3')).toEqual({
       errors: ['v must be at least 5'],
